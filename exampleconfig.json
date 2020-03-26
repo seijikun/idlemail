@@ -1,0 +1,47 @@
+{
+	"destinations": {
+		"destination@example.org": {
+			"type": "smtp",
+			"server": "smtp.example.org",
+			"port": 587,
+			"ssl": false,
+			"auth": {
+				"type": "plain",
+				"user": "destination@example.org",
+				"password": "mysupersecretpassword"
+			},
+			"recipient": "destination@example.org"
+		}
+	},
+	"sources": {
+		"trashmail1@example.org": {
+			"type": "imap_poll",
+			"server": "imap.example.org",
+			"port": 993,
+			"interval": 30,
+			"keep": false,
+			"auth": {
+				"type": "login",
+				"user": "trashmail1@example.org",
+				"password": "42isnotasafepassword"
+			}
+		},
+		"trashmail2@example.org": {
+			"type": "imap_idle",
+			"server": "imap.example.org",
+			"port": 993,
+			"path": "INBOX",
+			"renewinterval": 1700,
+			"keep": true,
+			"auth": {
+				"type": "login",
+				"user": "trashmail2@example.org",
+				"password": "1337isProbablyAbitsafer!"
+			}
+		}
+	},
+	"mappings": {
+		"trashmail1@example.org": [ "destination@example.org" ],
+		"trashmail2@example.org": [ "destination@example.org" ]
+	}
+}

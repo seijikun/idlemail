@@ -1,0 +1,26 @@
+[package]
+name = "idlemail"
+version = "0.1.0"
+authors = ["Markus Ebner <info@ebner-markus.de>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "^0.4"
+pretty_env_logger = "^0.4"
+anyhow = "1"
+serde = "1"
+serde_json = "1"
+serde_derive = "1"
+signal = "0"
+mime = "0"
+time = "0.2"
+chrono = "0"
+email = "0"
+lettre = { git = "https://github.com/lettre/lettre" }
+async-imap = "0"
+async-std = "1"
+futures = "0.3"
+async-native-tls = "0"
+native-tls = "0"
