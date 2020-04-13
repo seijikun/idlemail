@@ -19,7 +19,7 @@ impl MailSource for TestSource {
             .date(&time::OffsetDateTime::now())
             .text("plain/Text")
             .html("html/text")
-            .attachment("Test-Content".as_bytes(), "test.txt", &mime::TEXT_PLAIN)
+            .attachment(b"Test-Content", "test.txt", &mime::TEXT_PLAIN)
             .unwrap()
             .build()
             .unwrap();

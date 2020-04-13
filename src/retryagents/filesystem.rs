@@ -5,7 +5,6 @@ use crate::{
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
-use serde_json;
 use std::{
     collections::VecDeque,
     fs, thread,
@@ -44,7 +43,7 @@ pub struct FilesystemRetryAgent {
 impl FilesystemRetryAgent {
     pub fn new(config: &FilesystemRetryAgentConfig) -> Self {
         Self {
-            log_target: format!("RetryAgent[Filesystem]"),
+            log_target: "RetryAgent[Filesystem]".to_string(),
             config: config.clone(),
             worker: None,
         }
@@ -174,7 +173,7 @@ impl MailRetryAgent for FilesystemRetryAgent {
                 }
                 // see if any of the queued mails is due
                 let now = SystemTime::now();
-                while queue.len() > 0 {
+                while !queue.is_empty() {
                     if queue.get(0).unwrap().due_time < now {
                         let mail = queue.pop_front().unwrap();
                         info!(

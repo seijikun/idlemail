@@ -205,7 +205,7 @@ impl<'a> Iterator for UnseenMailIterator<'a> {
                 // and configuration tells us to delete fetched messages, we batch-mark
                 // all fetched messages in the currently (still) selected mailbox as
                 // deleted
-                if self.unread_mails.len() != 0 && self.delete {
+                if !self.unread_mails.is_empty() && self.delete {
                     if let Err(e) = task::block_on(self.con.delete_mails(&self.unread_mails)) {
                         return Some(Err(e));
                     }

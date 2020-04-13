@@ -51,7 +51,7 @@ impl MailSource for ImapPollSource {
                     });
 
                 // sleep until next poll is due - interrupt if requested to stop
-                if let Some(_) = channel.next_timeout(Duration::from_secs(config.interval)) {
+                if channel.next_timeout(Duration::from_secs(config.interval)).is_some() {
                     // received stop request -> return, otherwise, do next poll round
                     info!(target: &log_target, "Stopping");
                     return;

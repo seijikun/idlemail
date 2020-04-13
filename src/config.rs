@@ -1,5 +1,4 @@
 use serde_derive::{Deserialize, Serialize};
-use serde_json;
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,13 +33,10 @@ impl ConfigContainer {
             }
         }
         if let Some(retry_agent) = &self.retryagent {
-            match retry_agent {
-                RetryAgentConfig::Filesystem(config) => {
-                    if !Path::new(&config.path).exists() {
-                        return Err(format!("FilesystemRetryAgent: Path does not exist"));
-                    }
+            if let RetryAgentConfig::Filesystem(config) = retry_agent {
+                if !Path::new(&config.path).exists() {
+                    return Err("FilesystemRetryAgent: Path does not exist".to_string());
                 }
-                _ => {}
             }
         }
         Ok(())

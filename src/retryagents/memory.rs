@@ -17,7 +17,7 @@ pub struct MemoryRetryAgent {
 impl MemoryRetryAgent {
     pub fn new(config: &MemoryRetryAgentConfig) -> Self {
         Self {
-            log_target: format!("RetryAgent[Memory]"),
+            log_target: "RetryAgent[Memory]".to_string(),
             config: config.clone(),
             worker: None,
         }
@@ -46,7 +46,7 @@ impl MailRetryAgent for MemoryRetryAgent {
                     match msg {
                         RetryAgentMessage::Shutdown => {
                             info!(target: &log_target, "Stopping");
-                            if queue.len() > 0 {
+                            if !queue.is_empty() {
                                 warn!(target: &log_target, "There were {} mails queued for retry. These are permanently lost.", queue.len());
                             }
                             return;

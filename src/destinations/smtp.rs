@@ -48,11 +48,8 @@ impl MailDestination for SmtpDestination {
             let mut tls_builder = TlsConnector::builder();
             tls_builder.min_protocol_version(Some(native_tls::Protocol::Tlsv11));
             let tls_parameters =
-                ClientTlsParameters::new(config.server.clone(), tls_builder.build().unwrap());
-            let security_settings = match config.ssl {
-                true => ClientSecurity::Wrapper(tls_parameters),
-                false => ClientSecurity::Required(tls_parameters),
-            };
+				ClientTlsParameters::new(config.server.clone(), tls_builder.build().unwrap());
+			let security_settings = if config.ssl { ClientSecurity::Wrapper(tls_parameters) } else { ClientSecurity::Required(tls_parameters) };
 
             // construct smtp client
             let mut mailer =

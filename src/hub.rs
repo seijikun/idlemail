@@ -71,9 +71,9 @@ impl HubChannel {
     }
 
     pub fn queue_mail_for_retry(&self, dstname: String, mail: Mail) {
-        if let Err(_) = self
+        if self
             .retryagent_sender
-            .send(RetryAgentMessage::QueueMail { dstname, mail })
+            .send(RetryAgentMessage::QueueMail { dstname, mail }).is_err()
         {
             warn!(target: "HubChannel", "Failed to queue mail for retransmission. Either no RetryAgent configured, or a bug.");
         }
@@ -196,9 +196,6 @@ pub struct HubRetryAgentChannel {
     recv: mpsc::Receiver<RetryAgentMessage>,
 }
 impl HubRetryAgentChannel {
-    pub fn next(&self) -> Option<RetryAgentMessage> {
-        self.recv.recv().ok()
-    }
     pub fn next_timeout(&self, timeout: Duration) -> Option<RetryAgentMessage> {
         self.recv.recv_timeout(timeout).ok()
     }
