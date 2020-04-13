@@ -2,7 +2,7 @@ use crate::{
 	config::MemoryRetryAgentConfig,
 	hub::{MailAgent, MailRetryAgent, RetryAgentMessage, Mail}
 };
-use log::{info};
+use log::{info, warn};
 use std::{time::{SystemTime, Duration}, thread, collections::VecDeque};
 
 pub struct MemoryRetryAgent {
@@ -38,6 +38,9 @@ impl MailRetryAgent for MemoryRetryAgent {
 					match msg {
 						RetryAgentMessage::Shutdown => {
 							info!(target: &log_target, "Stopping");
+							if queue.len() > 0 {
+								warn!(target: &log_target, "There were {} mails queued for retry. These are permanently lost.", queue.len());
+							}
 							return;
 						},
 						RetryAgentMessage::QueueMail { dstname, mail } => {
