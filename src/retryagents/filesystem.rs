@@ -118,7 +118,7 @@ impl MailRetryAgent for FilesystemRetryAgent {
 								file_path: "".to_owned()
 							};
 							for i in 0..10 { // try 10 append-indices against hash-collision
-								let file_name = format!("{}/{}-{}.json", config.path, &retry_mail.mail.hash, i);
+								let file_name = format!("{}/{}_to_{}-{}.json", config.path, &retry_mail.mail.hash, retry_mail.dstname, i);
 								if let Ok(retry_file) = fs::File::create(&file_name) {
 									retry_mail.file_path = file_name.clone();
 									match serde_json::to_writer(retry_file, &QueuedRetryMailModel::from(&retry_mail)) {
