@@ -63,25 +63,37 @@ The overall structure of the configuration file is:
             // list of
             "<destination name>"
         ]
+    },
+    "retryagent": { // optional
+        // Configure the RetryAgent, which will try to re-schedule mails
+        // that were not sent, e.g. due to a temporary Destination failure
     }
 }
 ```
 
-## TODO:
-The current architecture is too simple.
-If sending of a mail fails, the mail is permanently lost (with `keep = false`), because it was already deleted from the source.
-I see two ways to fix this:
+# RetryAgents
+Idlemail also employs the concept of RetryAgents.
+If a mail was downloaded from the source, it is gone. When the sending to some destination for such a mail fails, it is permanently lost.
 
-### Permanent-Storage
-Store the mail in permanent storage and try again... (when?)
+Destinations thus report back to the `MailHub` if sending of a mail failed. The `MailHub` will then queue the mail into the optionally employed RetryAgent.
+This RetryAgent remembers the mail, and to which destination it is supposed to go. After a configured amount of time, sending is re-attempted.
 
-### Two-Way Feedback architecture
-Only marking mails in the source as read & deleted after they were successfully sent, using feedback from the destination back to the source.
+If a mail should have been distributed to multiple destinations, of which only one failed, only the delivery to this destination will be attempted.
 
-```
-<source> --download--> MailHub --distribute--> <destination>
-destination attempts to send mail
-<destination> --notify about success--> MailHub --notify about success--> <source>
-<source> --delete mail--> <server>
-```
-This would allow only marking mails as read (& deleted), that were successfully sent; however, if there are two destinations and sending fails on only one of them, the mail will be duplicated on subsequent attempts.
+Currently implemented RetryAgents are:
+
+## Memory
+RetryAgent that only stores messages in RAM.
+If Idlemail is shut down while this RetryAgent has mails in queue, the mails will most definitely be lost.
+
+#### Configuration parameters
+- **delay**: Amount of seconds to wait until submitting the mail for a re-attempted sending.
+
+## Filesystem
+RetryAgent that is an extension of the Memory agent.
+This agent stores mail in RAM, but also stores them in a designated (configured) folder in the filesystem.
+If Idlemail is restarted, this RetryAgent will restore the previous queue from the filesystm folder.
+
+#### Configuration parameters
+- **delay**: Amount of seconds to wait until submitting the mail for a re-attempted sending.
+- **path**: Path to a folder in the filesystem, where this RetryAgent will save mails to and restore them from when starting.

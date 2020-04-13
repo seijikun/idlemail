@@ -43,5 +43,9 @@
 	"mappings": {
 		"trashmail1@example.org": [ "destination@example.org" ],
 		"trashmail2@example.org": [ "destination@example.org" ]
+	},
+	"retryagent": {
+		"type": "filesystem",
+		"path": "/tmp/idlemail_retryagent"
 	}
 }
