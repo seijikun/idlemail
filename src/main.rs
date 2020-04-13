@@ -1,13 +1,12 @@
-mod hub;
 mod config;
 mod destinations;
-mod sources;
+mod hub;
 mod retryagents;
+mod sources;
 
-use log::{info, debug, error};
+use log::{debug, error, info};
 use signal::{trap::Trap, Signal};
-use std::time::{Instant, Duration};
-
+use std::time::{Duration, Instant};
 
 fn main() {
     pretty_env_logger::init();
@@ -31,17 +30,15 @@ fn main() {
         let trap = Trap::trap(&[Signal::SIGINT, Signal::SIGTERM]);
         let stop_token = mailhub.get_stop_sender();
         debug!(target: "Idlemail", "Starting signal observer thread");
-        std::thread::spawn(move || {
-            loop {
-                match trap.wait(Instant::now() + Duration::from_millis(50)) {
-                    Some(Signal::SIGINT) | Some(Signal::SIGTERM) => {
-                        info!(target: "Idlemail", "Received termination signal");
-                        info!(target: "Idlemail", "Initiating shutdown");
-                        stop_token.stop();
-                        return;
-                    },
-                    _ => {}
+        std::thread::spawn(move || loop {
+            match trap.wait(Instant::now() + Duration::from_millis(50)) {
+                Some(Signal::SIGINT) | Some(Signal::SIGTERM) => {
+                    info!(target: "Idlemail", "Received termination signal");
+                    info!(target: "Idlemail", "Initiating shutdown");
+                    stop_token.stop();
+                    return;
                 }
+                _ => {}
             }
         });
     }

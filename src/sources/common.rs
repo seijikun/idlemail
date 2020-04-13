@@ -1,9 +1,9 @@
 use crate::{config::AuthMethod, hub::Mail};
 use anyhow::{anyhow, Context, Result};
-use async_native_tls::{TlsConnector, TlsStream};
-use async_std::{prelude::*, net::TcpStream, task};
-use std::{collections::VecDeque, iter::FromIterator};
 use async_imap::types::Seq;
+use async_native_tls::{TlsConnector, TlsStream};
+use async_std::{net::TcpStream, prelude::*, task};
+use std::{collections::VecDeque, iter::FromIterator};
 pub trait MailPath {
     fn path(&self) -> String;
 }
@@ -11,7 +11,7 @@ impl MailPath for async_imap::types::Name {
     fn path(&self) -> String {
         match self.delimiter() {
             Some(delimiter) => self.name().to_owned().replace(delimiter, "/"),
-            None => self.name().to_owned()
+            None => self.name().to_owned(),
         }
     }
 }
@@ -49,7 +49,10 @@ impl ImapConnection {
         if self.session.is_none() {
             let client = self.client()?;
             let session = match self.auth.clone() {
-                AuthMethod::Plain { user: _, password: _ } => {
+                AuthMethod::Plain {
+                    user: _,
+                    password: _,
+                } => {
                     //TODO: implement
                     unimplemented!();
                 }
@@ -66,7 +69,9 @@ impl ImapConnection {
     }
     fn take_session(&mut self) -> Result<ImapSession> {
         let _ = self.session()?;
-        self.session.take().ok_or(anyhow!("Failed to take IMAP session"))
+        self.session
+            .take()
+            .ok_or(anyhow!("Failed to take IMAP session"))
     }
     pub fn run<F, R>(&mut self, runfn: F) -> Result<R>
     where
@@ -106,34 +111,52 @@ impl ImapConnection {
     async fn fetch_mail(&mut self, message_id: String) -> Result<async_imap::types::Fetch> {
         let message_stream = self.session()?.fetch(&message_id, "RFC822").await?;
         let mut messages: VecDeque<_> = message_stream.collect::<ImapResult<_>>().await?;
-        messages.pop_front().ok_or(anyhow!("Failed to fetch message: {}", message_id))
+        messages
+            .pop_front()
+            .ok_or(anyhow!("Failed to fetch message: {}", message_id))
     }
 
     async fn delete_mails(&mut self, message_ids: &[Seq]) -> Result<()> {
-        let id_list: String = message_ids.iter()
-            .fold("".to_owned(), |a,b| {
-                if a.len() == 0 { b.to_string() } else { format!("{},{}", a, b) }
-            });
+        let id_list: String = message_ids.iter().fold("".to_owned(), |a, b| {
+            if a.len() == 0 {
+                b.to_string()
+            } else {
+                format!("{},{}", a, b)
+            }
+        });
 
         // Add \Delete flags to messages
-        let _updates: Vec<_> = self.session()?
-            .store(id_list, "+FLAGS (\\Deleted)").await?
-            .collect::<ImapResult<_>>().await?;
+        let _updates: Vec<_> = self
+            .session()?
+            .store(id_list, "+FLAGS (\\Deleted)")
+            .await?
+            .collect::<ImapResult<_>>()
+            .await?;
         // Expunge messages marked with \Delete
-        let _upates: Vec<_> = self.session()?
-            .expunge().await?
-            .collect::<ImapResult<_>>().await?;
+        let _upates: Vec<_> = self
+            .session()?
+            .expunge()
+            .await?
+            .collect::<ImapResult<_>>()
+            .await?;
         Ok(())
     }
 
-    pub fn iter_unseen_recursive(&mut self, filter: Option<&str>, delete: bool) -> Result<UnseenMailIterator> {
+    pub fn iter_unseen_recursive(
+        &mut self,
+        filter: Option<&str>,
+        delete: bool,
+    ) -> Result<UnseenMailIterator> {
         // get a (linearized) list of the folder structure
         let mut mailboxes = task::block_on(self.recursive_mailbox_list())?;
         if let Some(filter) = filter {
-            mailboxes = mailboxes.into_iter().filter(|mailbox| {
-                // Match the given filter against the "/"-delimited absolute path
-                mailbox.path().starts_with(filter)
-            }).collect();
+            mailboxes = mailboxes
+                .into_iter()
+                .filter(|mailbox| {
+                    // Match the given filter against the "/"-delimited absolute path
+                    mailbox.path().starts_with(filter)
+                })
+                .collect();
         }
         Ok(UnseenMailIterator {
             con: self,
@@ -141,7 +164,7 @@ impl ImapConnection {
             mailboxes,
             mailbox_idx: 0,
             unread_mails: Vec::new(),
-            unread_mail_idx: 0
+            unread_mail_idx: 0,
         })
     }
 
@@ -166,7 +189,7 @@ pub struct UnseenMailIterator<'a> {
     mailboxes: Vec<async_imap::types::Name>,
     mailbox_idx: usize,
     unread_mails: Vec<Seq>,
-    unread_mail_idx: usize
+    unread_mail_idx: usize,
 }
 impl<'a> Iterator for UnseenMailIterator<'a> {
     type Item = Result<(String, Mail)>;
@@ -177,10 +200,10 @@ impl<'a> Iterator for UnseenMailIterator<'a> {
         loop {
             if self.unread_mail_idx == self.unread_mails.len() {
                 // first call, or no unseen mails remaining in the current mailbox
-                
+
                 // if we just finished iterating over all unread messages in a mailbox,
                 // and configuration tells us to delete fetched messages, we batch-mark
-                // all fetched messages in the currently (still) selected mailbox as 
+                // all fetched messages in the currently (still) selected mailbox as
                 // deleted
                 if self.unread_mails.len() != 0 && self.delete {
                     if let Err(e) = task::block_on(self.con.delete_mails(&self.unread_mails)) {
@@ -216,12 +239,10 @@ impl<'a> Iterator for UnseenMailIterator<'a> {
                 // fetch and return it.
                 return Some(
                     match task::block_on(self.con.fetch_mail(message_id.to_string())) {
-                        Ok(fetch_result) => {
-                            fetch_result
-                                .body()
-                                .map(|body| (path, Mail::from_rfc822(body.to_vec())) )
-                                .ok_or(anyhow!("Failed to fetch message: {}", message_id))
-                        },
+                        Ok(fetch_result) => fetch_result
+                            .body()
+                            .map(|body| (path, Mail::from_rfc822(body.to_vec())))
+                            .ok_or(anyhow!("Failed to fetch message: {}", message_id)),
                         Err(err) => Err(err),
                     },
                 );
