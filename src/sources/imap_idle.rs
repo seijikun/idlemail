@@ -1,6 +1,6 @@
 use crate::{
 	config::ImapIdleSourceConfig,
-	hub::{MailAgent, MailSource, MailChannel}
+	hub::{MailAgent, MailSource, HubSourceChannel}
 };
 use super::common::ImapConnection;
 use log::{info, debug, trace};
@@ -11,44 +11,43 @@ use std::{time::Duration, thread};
 pub struct ImapIdleSource {
 	log_target: String,
 	config: ImapIdleSourceConfig,
-	worker: Option<thread::JoinHandle<()>>,
-	mail_channel: Option<MailChannel>,
-	stop_sender: Option<async_std::sync::Sender<()>>
+	worker: Option<thread::JoinHandle<()>>
 }
 impl ImapIdleSource {
-	pub fn new(name: String, config: &ImapIdleSourceConfig, mail_channel: MailChannel) -> Self {
+	pub fn new(name: String, config: &ImapIdleSourceConfig) -> Self {
 		Self {
 			log_target: format!("ImapIdle[{}]", name),
 			config: config.clone(),
-			worker: None,
-			mail_channel: Some(mail_channel),
-			stop_sender: None
+			worker: None
 		}
 	}
 }
 impl MailAgent for ImapIdleSource {
-    fn start(&mut self) {
+    fn join(&mut self) {
+		self.worker.take().unwrap().join().expect("Thread exited with errors");
+	}
+}
+impl MailSource for ImapIdleSource {
+    fn start(&mut self, channel: HubSourceChannel) {
 		info!(target: &self.log_target, "Starting");
 		trace!(target: &self.log_target, "Using Configuration:\n{:?}", self.config);
 
 		let log_target = self.log_target.clone();
 		let config = self.config.clone();
 		let (stop_sender, stop_recv) = async_std::sync::channel::<()>(1);
-		self.stop_sender = Some(stop_sender);
-		let mail_channel = self.mail_channel.take().unwrap();
 
 		self.worker = Some(thread::spawn(move || {
 			let mut con = ImapConnection::new(
 				config.server.clone(), config.port, config.auth.clone());
 
-			let stop_future = stop_recv.recv().fuse();
+			let stop_future = channel.next().fuse();
 			pin_mut!(stop_future);
 
 			loop {
 				con.iter_unseen_recursive(Some(&config.path), !config.keep).unwrap().for_each(|unseen_message| {
 					if let Ok( (path, unseen_message) ) = unseen_message {
 						debug!(target: &log_target, "Unread mail in {}", path);
-						mail_channel.notify(unseen_message);
+						channel.notify_new_mail(unseen_message);
 					}
 				});
 
@@ -70,17 +69,12 @@ impl MailAgent for ImapIdleSource {
 						};
 					}
 				});
-				if should_exit { return; }
+				if should_exit {
+					info!(target: &log_target, "Stopping");
+					return;
+				}
 				debug!(target: &log_target, "IDLE interrupted");
 			}
 		}));
 	}
-
-    fn stop(&mut self) {
-		info!(target: &self.log_target, "Stopping");
-		task::block_on(self.stop_sender.as_mut().unwrap().send(()));
-		self.worker.take().unwrap().join().unwrap();
-		info!(target: &self.log_target, "Stopped");
-	}
 }
-impl MailSource for ImapIdleSource {}

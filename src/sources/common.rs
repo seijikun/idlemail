@@ -152,6 +152,13 @@ impl ImapConnection {
         Ok(idle_handle)
     }
 }
+impl Drop for ImapConnection {
+    fn drop(&mut self) {
+        if let Some(session) = &mut self.session {
+            let _ = task::block_on(session.logout());
+        }
+    }
+}
 
 pub struct UnseenMailIterator<'a> {
     con: &'a mut ImapConnection,

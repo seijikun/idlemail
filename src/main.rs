@@ -2,10 +2,12 @@ mod hub;
 mod config;
 mod destinations;
 mod sources;
+mod retryagents;
 
 use log::{info, debug, error};
 use signal::{trap::Trap, Signal};
 use std::time::{Instant, Duration};
+
 
 fn main() {
     pretty_env_logger::init();

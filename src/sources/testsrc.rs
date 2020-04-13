@@ -1,16 +1,17 @@
-use crate::hub::{MailAgent, MailSource, MailChannel, Mail};
+use crate::hub::{MailAgent, MailSource, Mail};
 use lettre::builder::EmailBuilder;
 
-pub struct TestSource {
-	mail_channel: MailChannel
-}
+pub struct TestSource {}
 impl TestSource {
-	pub fn new(mail_channel: MailChannel) -> Self {
-		Self {mail_channel}
+	pub fn new() -> Self {
+		Self {}
 	}
 }
 impl MailAgent for TestSource {
-    fn start(&mut self) {
+    fn join(&mut self) {}
+}
+impl MailSource for TestSource {
+    fn start(&mut self, channel: crate::hub::HubSourceChannel) {
 		let mail = EmailBuilder::new()
 			.from("sender@example.org")
 			.to("receiver@example.or")
@@ -27,8 +28,6 @@ impl MailAgent for TestSource {
 			.unwrap();
 		let mail_data = mail.message_to_string().unwrap().as_bytes().to_vec();
 
-		self.mail_channel.notify(Mail::from_rfc822(mail_data));
+		channel.notify_new_mail(Mail::from_rfc822(mail_data));
 	}
-    fn stop(&mut self) {}
 }
-impl MailSource for TestSource {}

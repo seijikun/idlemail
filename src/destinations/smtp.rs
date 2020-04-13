@@ -1,10 +1,10 @@
 use crate::{
 	config::{AuthMethod, SmtpDestinationConfig},
-	hub::{MailAgent, MailDestination, Mail}
+	hub::{MailAgent, MailDestination, HubDestinationChannel, DestinationMessage}
 };
-use std::{thread, sync::mpsc};
-use log::{info, trace, error};
-use native_tls::{TlsConnector};
+use std::thread;
+use log::{error, info, trace};
+use native_tls::TlsConnector;
 use lettre::{
 	SmtpClient, Transport, EmailAddress, Envelope,
     smtp::{
@@ -15,41 +15,32 @@ use lettre::{
 	}
 };
 
-
-
-
-
-enum SmtpDestinationMessage {
-	Shutdown,
-	Message { mail: Mail }
-}
-
 pub struct SmtpDestination {
 	log_target: String,
 	config: SmtpDestinationConfig,
-	worker: Option<thread::JoinHandle<()>>,
-	chan_send: mpsc::Sender<SmtpDestinationMessage>,
-	chan_recv: Option<mpsc::Receiver<SmtpDestinationMessage>>
+	worker: Option<thread::JoinHandle<()>>
 }
 impl SmtpDestination {
 	pub fn new(name: String, config: &SmtpDestinationConfig) -> Self {
-		let (chan_send, chan_recv) = mpsc::channel();
 		Self {
 			log_target: format!("Smtp[{}]", name),
 			config: config.clone(),
-			worker: None,
-			chan_send, chan_recv: Some(chan_recv)
+			worker: None
 		}
 	}
 }
 impl MailAgent for SmtpDestination {
-    fn start(&mut self) {
+	fn join(&mut self) {
+		self.worker.take().unwrap().join().expect("Thread exited with errors");
+	}
+}
+impl MailDestination for SmtpDestination {
+    fn start(&mut self, channel: HubDestinationChannel) {
 		info!(target: &self.log_target, "Starting");
 		trace!(target: &self.log_target, "Using Configuration:\n{:?}", self.config);
 
 		let log_target = self.log_target.clone();
 		let config = self.config.clone();
-		let chan_recv = self.chan_recv.take().unwrap();
 		self.worker = Some(thread::spawn(move || {
 			// construct connection security settings
 			let mut tls_builder = TlsConnector::builder();
@@ -84,37 +75,30 @@ impl MailAgent for SmtpDestination {
 			let mut mailer = mailer.transport();
 			let recipient = EmailAddress::new(config.recipient).unwrap();
 
-			while let Ok(msg) = chan_recv.recv() {
+			while let Ok(msg) = channel.next() {
 				match msg {
-					SmtpDestinationMessage::Shutdown => return,
-					SmtpDestinationMessage::Message{mail} => {
+					DestinationMessage::Shutdown => {
+						info!(target: &log_target, "Stopping");
+						return;
+					},
+					DestinationMessage::Mail{mail} => {
 						// Construct mail
-						let mail = lettre::Email::new(
+						let enveloped_mail = lettre::Email::new(
 							Envelope::new(None,vec![recipient.clone()]).unwrap(),
 							"".to_owned(),
-							mail.data
+							mail.data.clone()
 						);
 						// Send mail
-						match mailer.send(mail) {
+						match mailer.send(enveloped_mail) {
 							Ok(_) => info!(target: &log_target, "Successfully sent mail"),
-							Err(err) => error!(target: &log_target, "Error while sending mail:\n{}", err)
+							Err(err) => {
+								error!(target: &log_target, "Error while sending mail:\n{}", err);
+								channel.notify_failed_send(mail);
+							}
 						}
 					}
 				}
 			}
 		}));
 	}
-    fn stop(&mut self) {
-		info!(target: &self.log_target, "Stopping");
-		self.chan_send.send(SmtpDestinationMessage::Shutdown).unwrap();
-		self.worker.take().unwrap().join().unwrap();
-		info!(target: &self.log_target, "Stopped");
-	}
-}
-impl MailDestination for SmtpDestination {
-	
-	fn enqueue(&mut self, mail: crate::hub::Mail) {
-		self.chan_send.send(SmtpDestinationMessage::Message{ mail }).unwrap();
-	}
-
 }

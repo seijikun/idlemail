@@ -12,6 +12,7 @@ use serde_json;
 pub struct ConfigContainer {
 	pub destinations: HashMap<String, DestinationConfig>,
 	pub sources: HashMap<String, SourceConfig>,
+	pub retryagent: Option<RetryAgentConfig>,
 	pub mappings: HashMap<String, Vec<String>>
 }
 impl ConfigContainer {
@@ -31,6 +32,16 @@ impl ConfigContainer {
 				if !self.destinations.contains_key(dstname) {
 					return Err(format!("Unknown destination: {} specified in mappings", dstname));
 				}
+			}
+		}
+		if let Some(retry_agent) = &self.retryagent {
+			match retry_agent {
+				RetryAgentConfig::Filesystem(config) => {
+					if !Path::new(&config.path).exists() {
+						return Err(format!("FilesystemRetryAgent: Path does not exist"));
+					}
+				},
+				_ => {}
 			}
 		}
 		Ok(())
@@ -105,9 +116,43 @@ pub struct SmtpDestinationConfig {
 	pub recipient: String
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct TestDestinationConfig {
+	#[serde(rename = "failNFirst")] pub fail_n_first: u16
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(tag = "type")]
 pub enum DestinationConfig {
+	#[serde(rename = "test")] Test (TestDestinationConfig),
 	#[serde(rename = "smtp")] Smtp (SmtpDestinationConfig)
+}
+
+
+
+// #############
+// # RetryAgent
+// #############
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryRetryAgentConfig {
+	pub delay: u64
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct FilesystemRetryAgentConfig {
+	pub delay: u64,
+	pub path: String
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[serde(tag = "type")]
+pub enum RetryAgentConfig {
+	#[serde(rename = "memory")] Memory(MemoryRetryAgentConfig),
+	#[serde(rename = "filesystem")] Filesystem(FilesystemRetryAgentConfig)
 }
