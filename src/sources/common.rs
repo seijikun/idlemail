@@ -71,7 +71,7 @@ impl ImapConnection {
         let _ = self.session()?;
         self.session
             .take()
-            .ok_or(anyhow!("Failed to take IMAP session"))
+            .ok_or_else(|| anyhow!("Failed to take IMAP session"))
     }
     pub fn run<F, R>(&mut self, runfn: F) -> Result<R>
     where
@@ -113,12 +113,12 @@ impl ImapConnection {
         let mut messages: VecDeque<_> = message_stream.collect::<ImapResult<_>>().await?;
         messages
             .pop_front()
-            .ok_or(anyhow!("Failed to fetch message: {}", message_id))
+            .ok_or_else(|| anyhow!("Failed to fetch message: {}", message_id))
     }
 
     async fn delete_mails(&mut self, message_ids: &[Seq]) -> Result<()> {
         let id_list: String = message_ids.iter().fold("".to_owned(), |a, b| {
-            if a.len() == 0 {
+            if a.is_empty() {
                 b.to_string()
             } else {
                 format!("{},{}", a, b)
@@ -242,7 +242,7 @@ impl<'a> Iterator for UnseenMailIterator<'a> {
                         Ok(fetch_result) => fetch_result
                             .body()
                             .map(|body| (path, Mail::from_rfc822(body.to_vec())))
-                            .ok_or(anyhow!("Failed to fetch message: {}", message_id)),
+                            .ok_or_else(|| anyhow!("Failed to fetch message: {}", message_id)),
                         Err(err) => Err(err),
                     },
                 );
