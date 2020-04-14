@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use async_imap::types::Seq;
 use async_native_tls::{TlsConnector, TlsStream};
 use async_std::{net::TcpStream, prelude::*, task};
-use std::{collections::VecDeque, iter::FromIterator};
+use std::{collections::VecDeque, iter::FromIterator, cell::{RefMut, RefCell}, borrow::BorrowMut};
 pub trait MailPath {
     fn path(&self) -> String;
 }
@@ -24,7 +24,7 @@ pub struct ImapConnection {
     server: String,
     port: u16,
     auth: AuthMethod,
-    session: Option<ImapSession>,
+    session: RefCell<Option<ImapSession>>,
 }
 impl ImapConnection {
     pub fn new(server: String, port: u16, auth: AuthMethod) -> Self {
@@ -32,10 +32,10 @@ impl ImapConnection {
             server,
             port,
             auth,
-            session: None,
+            session: RefCell::new(None),
         }
     }
-    fn client(&mut self) -> Result<ImapClient> {
+    fn client(&self) -> Result<ImapClient> {
         let tls = TlsConnector::new();
         let client = task::block_on(async_imap::connect(
             (self.server.as_str(), self.port),
@@ -45,8 +45,8 @@ impl ImapConnection {
         .context("Failed to connect to IMAP server.")?;
         Ok(client)
     }
-    fn session(&mut self) -> Result<&mut ImapSession> {
-        if self.session.is_none() {
+    fn session(&self) -> Result<RefMut<ImapSession>> {
+        if self.session.borrow().is_none() {
             let client = self.client()?;
             let session = match self.auth.clone() {
                 AuthMethod::Plain {
@@ -62,29 +62,30 @@ impl ImapConnection {
             }
             .map_err(|(e, _)| e)
             .context("Failed to authenticate with the IMAP server.")?;
-            self.session = Some(session);
+            self.session.replace(Some(session));
         }
 
-        Ok(self.session.as_mut().unwrap())
+        Ok(RefMut::map(self.session.borrow_mut(), |s| s.as_mut().unwrap()))
     }
     fn take_session(&mut self) -> Result<ImapSession> {
         let _ = self.session()?;
         self.session
+            .borrow_mut()
             .take()
             .ok_or_else(|| anyhow!("Failed to take IMAP session"))
     }
-    pub fn run<F, R>(&mut self, runfn: F) -> Result<R>
+    pub fn run<F, R>(&self, runfn: F) -> Result<R>
     where
         F: Fn(&mut ImapSession) -> ImapResult<R>,
     {
         let mut retry = 0;
         loop {
-            let run_result = runfn(self.session()?);
+            let run_result = runfn(self.session()?.borrow_mut());
             match run_result {
                 Ok(result) => return Ok(result),
                 Err(async_imap::error::Error::ConnectionLost) => {
                     // Throw away currently cached session
-                    let _ = self.session.take();
+                    let _ = self.session.replace(None);
                 }
                 Err(e) => {
                     retry += 1;
@@ -96,7 +97,7 @@ impl ImapConnection {
         }
     }
 
-    async fn recursive_mailbox_list(&mut self) -> Result<Vec<async_imap::types::Name>> {
+    async fn recursive_mailbox_list(&self) -> Result<Vec<async_imap::types::Name>> {
         let result = self
             .session()?
             .list(None, Some("*"))
@@ -108,15 +109,16 @@ impl ImapConnection {
         Ok(result)
     }
 
-    async fn fetch_mail(&mut self, message_id: String) -> Result<async_imap::types::Fetch> {
-        let message_stream = self.session()?.fetch(&message_id, "RFC822").await?;
+    async fn fetch_mail(&self, message_id: String) -> Result<async_imap::types::Fetch> {
+        let mut session_borrow = self.session()?;
+        let message_stream = session_borrow.borrow_mut().fetch(&message_id, "RFC822").await?;
         let mut messages: VecDeque<_> = message_stream.collect::<ImapResult<_>>().await?;
         messages
             .pop_front()
             .ok_or_else(|| anyhow!("Failed to fetch message: {}", message_id))
     }
 
-    async fn delete_mails(&mut self, message_ids: &[Seq]) -> Result<()> {
+    async fn delete_mails(&self, message_ids: &[Seq]) -> Result<()> {
         let id_list: String = message_ids.iter().fold("".to_owned(), |a, b| {
             if a.is_empty() {
                 b.to_string()
@@ -143,7 +145,7 @@ impl ImapConnection {
     }
 
     pub fn iter_unseen_recursive(
-        &mut self,
+        &self,
         filter: Option<&str>,
         delete: bool,
     ) -> Result<UnseenMailIterator> {
@@ -177,14 +179,14 @@ impl ImapConnection {
 }
 impl Drop for ImapConnection {
     fn drop(&mut self) {
-        if let Some(session) = &mut self.session {
+        if let Ok(session) = &mut self.take_session() {
             let _ = task::block_on(session.logout());
         }
     }
 }
 
 pub struct UnseenMailIterator<'a> {
-    con: &'a mut ImapConnection,
+    con: &'a ImapConnection,
     delete: bool,
     mailboxes: Vec<async_imap::types::Name>,
     mailbox_idx: usize,
