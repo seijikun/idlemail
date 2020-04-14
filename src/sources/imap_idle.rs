@@ -1,11 +1,11 @@
-use super::common::ImapConnection;
+use super::common::{ImapConnection, MailPath};
 use crate::{
     config::ImapIdleSourceConfig,
     hub::{HubSourceChannel, MailAgent, MailSource},
 };
 use async_std::task;
 use futures::{future::FutureExt, pin_mut, select};
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use std::{thread, time::Duration};
 
 pub struct ImapIdleSource {
@@ -47,12 +47,30 @@ impl MailSource for ImapIdleSource {
             pin_mut!(stop_future);
 
             loop {
-                con.iter_unseen_recursive(Some(&config.path), !config.keep)
+                con.iter_mailboxes_recursive(None)
                     .unwrap()
-                    .for_each(|unseen_message| {
-                        if let Ok((path, unseen_message)) = unseen_message {
-                            debug!(target: &log_target, "Unread mail in {}", path);
-                            channel.notify_new_mail(unseen_message);
+                    .for_each(|mailbox| {
+                        let mut unread_mails = Vec::new();
+                        con.iter_unseen(&mailbox)
+                            .unwrap()
+                            .for_each(|unseen_message| {
+                                if let Ok((message_id, unseen_message)) = unseen_message {
+                                    unread_mails.push(message_id);
+                                    debug!(
+                                        target: &log_target,
+                                        "Unread mail in {}",
+                                        mailbox.path()
+                                    );
+                                    channel.notify_new_mail(unseen_message);
+                                }
+                            });
+                        if !config.keep {
+                            if let Err(e) = task::block_on(con.delete_mails(&unread_mails)) {
+                                warn!(
+                                    target: &log_target,
+                                    "Failed to deleted messages from mailbox\n{}", e
+                                );
+                            }
                         }
                     });
 

@@ -73,7 +73,8 @@ impl HubChannel {
     pub fn queue_mail_for_retry(&self, dstname: String, mail: Mail) {
         if self
             .retryagent_sender
-            .send(RetryAgentMessage::QueueMail { dstname, mail }).is_err()
+            .send(RetryAgentMessage::QueueMail { dstname, mail })
+            .is_err()
         {
             warn!(target: "HubChannel", "Failed to queue mail for retransmission. Either no RetryAgent configured, or a bug.");
         }
