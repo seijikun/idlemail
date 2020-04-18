@@ -83,7 +83,7 @@ impl MailSource for ImapIdleSource {
                     }
                 }
 
-                info!(
+                debug!(
                     target: &log_target,
                     "Entering IMAP IDLE to wait for server notification"
                 );

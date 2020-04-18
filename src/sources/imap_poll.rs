@@ -41,7 +41,7 @@ impl MailSource for ImapPollSource {
         self.worker = Some(thread::spawn(move || {
             let con = ImapConnection::new(config.server.clone(), config.port, config.auth.clone());
             loop {
-                info!(target: &log_target, "Polling for unread mails");
+                debug!(target: &log_target, "Polling for unread mails");
                 match con.iter_mailboxes_recursive(None) {
                     Ok(mailboxes) => {
                         mailboxes.for_each(|mailbox| {
