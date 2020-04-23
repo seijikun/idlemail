@@ -3,7 +3,35 @@
 Idlemail is a clone of fetchmail, focused around more modern usage scenarios, such as the support for an arbitrary amount of IDLE connections for low forwarding latency.
 
 The architecture of Idlemail is fairly simple.
-Split into sources, destinations, and the `MailHub`, which connects between them.
+Split into sources, destinations, and the `MailHub`, which connects between them:
+
+```
+##########            ###########  mail due for reattempt ##############
+# Source #  new mail  #         # <---------------------- #            #
+# ------ # ---------> # MAILHUB #                         # RetryAgent #
+#  src0  #            #         #  queue mail for retry   #            #
+##########            ########### ----------------------> ##############
+                     / \    ^
+            deliver-/   \   |-sending failed
+                   v     v  |
+     ###############     ###############
+     # Destination #     # Destination #
+     # ----------- #     # ----------- #
+     #    dst0     #     #    dst1     #
+     ###############     ###############
+```
+
+* [Sources](#sources)
+    * [Imap(Poll)](#ImapPoll)
+    * [Imap(IDLE)](#ImapIDLE)
+* [Destinations](#destinations)
+    * [Smtp](#smtp)
+    * [Exec](#exec)
+* [RetryAgents](#RetryAgents)
+    * [Memory](#memory)
+    * [Filesystem](#filesystem)
+
+---
 
 # Sources
 Sources are (as the name states), the sources for incoming mails.
@@ -23,20 +51,34 @@ This source uses the IMAP protocoll's IDLE extension, and thus only works within
 - Downloaded mails can optionally be deleted from the account
 
 #### Configuration parameters
-- **path**: This is the path to the mailbox (folder) in the account, within which to wait/scan for incoming mails. Paths are `/` delimited. This limitation is due to the corresponding limitation of IMAP's IDLE extension.
-- **renewinterval**: The interval with which the IDLE connection is refreshed. If this is too long, Idlemail could be classified as inactive, thus regularly kicked out of the connection. This interval is used to refresh the connection with the IMAP server. A typical value here (from the original RFC) is 29 minutes `=~1700`.
+- `path`: This is the path to the mailbox (folder) in the account, within which to wait/scan for incoming mails. Paths are `/` delimited. This limitation is due to the corresponding limitation of IMAP's IDLE extension.
+- `renewinterval`: The interval with which the IDLE connection is refreshed. If this is too long, Idlemail could be classified as inactive, thus regularly kicked out of the connection. This interval is used to refresh the connection with the IMAP server. A typical value here (from the original RFC) is 29 minutes `=~1700`.
 
 # Destinations
 Destinations are (as the name states), the destinations, to which the mails retrieved through the sources should be delivered.
 Idlemail currently supports the following destination implementations:
 
 ## Smtp
-This source uses the SMTP protocoll, to deliver retrieved mails.
+This destination uses the SMTP protocoll to deliver retrieved mails.
 Bear in mind, that you will most probably have to use authenticated SMTP, to be able to deliver a mail, which was originally sent from *a* to *b*, into a destination account *c*.
 
 #### Configuration parameters
-- **ssl**: Whether to use ssl (`true`) or plain/startls (`false`)
-- **recipient**: Mail address to deliver the mails to on the destination server
+- `ssl`: Whether to use ssl (`true`) or plain/startls (`false`)
+- `recipient`: Mail address to deliver the mails to on the destination server
+
+## Exec
+This destination uses a binary on the local filesystem to deliver the mail. One instance of the binary is spawned for each mail. The mail is piped into the stdin stream of the spawned binary.
+The child process inherits the environment variables of idlemail.
+Additionally to that, idlemail sets some custom environment variables with information about the mail:
+
+#### Special Environment Variables
+- `IDLEMAIL_SOURCE`: Set to the configured name of the source, from which the mail came
+- `IDLEMAIL_DESTINATION`: Name of the destination for which the binary is executed. This e.g. allows re-using the same executable for multiple destinations, even if some specific logic is required per destination.
+
+#### Configuration parameters
+- `executable`: Path to the executable to spawn for each mail
+- \[`arguments`\]: Optional string array of arguments to pass to the exectuable
+- \[`environment`\]: Optional Hashmap (json object) of environment variables that should be set additionally to, or overwrite variables inherited from idlemail's environment.
 
 ## Configuration
 Configuration of Idlemail is done using a json configuration file.
@@ -87,7 +129,7 @@ RetryAgent that only stores messages in RAM.
 If Idlemail is shut down while this RetryAgent has mails in queue, the mails will most definitely be lost.
 
 #### Configuration parameters
-- **delay**: Amount of seconds to wait until submitting the mail for a re-attempted sending.
+- `delay`: Amount of seconds to wait until submitting the mail for a re-attempted sending.
 
 ## Filesystem
 RetryAgent that is an extension of the Memory agent.
@@ -95,5 +137,5 @@ This agent stores mail in RAM, but also stores them in a designated (configured)
 If Idlemail is restarted, this RetryAgent will restore the previous queue from the filesystm folder.
 
 #### Configuration parameters
-- **delay**: Amount of seconds to wait until submitting the mail for a re-attempted sending.
-- **path**: Path to a folder in the filesystem, where this RetryAgent will save mails to and restore them from when starting.
+- `delay`: Amount of seconds to wait until submitting the mail for a re-attempted sending.
+- `path`: Path to a folder in the filesystem, where this RetryAgent will save mails to and restore them from when starting.

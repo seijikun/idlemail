@@ -16,6 +16,7 @@ use std::{
 struct QueuedRetryMailModel {
     pub due_time: SystemTime,
     pub dstname: String,
+    pub mail_from_src: String,
     pub mail_data: Vec<u8>,
 }
 impl From<&QueuedRetryMail> for QueuedRetryMailModel {
@@ -23,6 +24,7 @@ impl From<&QueuedRetryMail> for QueuedRetryMailModel {
         Self {
             due_time: retry_mail.due_time,
             dstname: retry_mail.dstname.clone(),
+            mail_from_src: retry_mail.mail.from_src.clone(),
             mail_data: retry_mail.mail.data.clone(),
         }
     }
@@ -69,7 +71,7 @@ impl FilesystemRetryAgent {
 				Some(QueuedRetryMail {
 					due_time: retry_mail.due_time,
 					dstname: retry_mail.dstname,
-					mail: Mail::from_rfc822(retry_mail.mail_data),
+					mail: Mail::from_rfc822(retry_mail.mail_from_src, retry_mail.mail_data),
 					file_path: file_path_str
 				})
 			})

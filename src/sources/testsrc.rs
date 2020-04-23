@@ -1,10 +1,12 @@
 use crate::hub::{Mail, MailAgent, MailSource};
 use lettre::builder::EmailBuilder;
 
-pub struct TestSource {}
+pub struct TestSource {
+    name: String,
+}
 impl TestSource {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(name: String) -> Self {
+        Self { name }
     }
 }
 impl MailAgent for TestSource {
@@ -18,13 +20,13 @@ impl MailSource for TestSource {
             .subject("Test Email")
             .date(&time::OffsetDateTime::now())
             .text("plain/Text")
-            .html("html/text")
+            .html("<b>html/text</b>")
             .attachment(b"Test-Content", "test.txt", &mime::TEXT_PLAIN)
             .unwrap()
             .build()
             .unwrap();
         let mail_data = mail.message_to_string().unwrap().as_bytes().to_vec();
 
-        channel.notify_new_mail(Mail::from_rfc822(mail_data));
+        channel.notify_new_mail(Mail::from_rfc822(self.name.clone(), mail_data));
     }
 }

@@ -1,13 +1,14 @@
 use super::common::{ImapConnection, MailPath};
 use crate::{
     config::ImapPollSourceConfig,
-    hub::{HubSourceChannel, MailAgent, MailSource},
+    hub::{HubSourceChannel, Mail, MailAgent, MailSource},
 };
 use async_std::task;
 use log::{debug, error, info, trace, warn};
 use std::{thread, time::Duration};
 
 pub struct ImapPollSource {
+    name: String,
     log_target: String,
     config: ImapPollSourceConfig,
     worker: Option<thread::JoinHandle<()>>,
@@ -16,6 +17,7 @@ impl ImapPollSource {
     pub fn new(name: String, config: &ImapPollSourceConfig) -> Self {
         Self {
             log_target: format!("ImapPoll[{}]", name),
+            name,
             config: config.clone(),
             worker: None,
         }
@@ -35,6 +37,7 @@ impl MailSource for ImapPollSource {
         info!(target: &self.log_target, "Starting");
         trace!(target: &self.log_target, "Using Configuration:\n{:?}", self.config);
 
+        let name = self.name.clone();
         let log_target = self.log_target.clone();
         let config = self.config.clone();
 
@@ -56,7 +59,10 @@ impl MailSource for ImapPollSource {
                                             "Unread mail in {}",
                                             mailbox.path()
                                         );
-                                        channel.notify_new_mail(unseen_message);
+                                        channel.notify_new_mail(Mail::from_rfc822(
+                                            name.clone(),
+                                            unseen_message,
+                                        ));
                                     }
                                 });
                             if !config.keep {

@@ -1,4 +1,4 @@
-use crate::{config::AuthMethod, hub::Mail};
+use crate::config::AuthMethod;
 use anyhow::{anyhow, Context, Result};
 use async_imap::types::Seq;
 use async_native_tls::{TlsConnector, TlsStream};
@@ -58,10 +58,7 @@ impl ImapConnection {
         if self.session.borrow().is_none() {
             let client = self.client()?;
             let session = match self.auth.clone() {
-                AuthMethod::Plain {
-                    user: _,
-                    password: _,
-                } => {
+                AuthMethod::Plain { .. } => {
                     //TODO: implement
                     unimplemented!();
                 }
@@ -212,14 +209,14 @@ pub struct UnseenMailIterator<'a> {
     unread_mails: VecDeque<Seq>,
 }
 impl<'a> Iterator for UnseenMailIterator<'a> {
-    type Item = Result<(Seq, Mail)>;
+    type Item = Result<(Seq, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.unread_mails.pop_front().map(|message_id| {
             match task::block_on(self.con.fetch_mail(message_id.to_string())) {
                 Ok(fetch_result) => fetch_result
                     .body()
-                    .map(|body| (message_id, Mail::from_rfc822(body.to_vec())))
+                    .map(|body| (message_id, body.to_vec()))
                     .ok_or_else(|| anyhow!("Failed to fetch message: {}", message_id)),
                 Err(err) => Err(err),
             }

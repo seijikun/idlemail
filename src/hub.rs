@@ -1,7 +1,7 @@
 use super::config::{ConfigContainer, DestinationConfig, SourceConfig};
 use crate::{
     config::RetryAgentConfig,
-    destinations::{smtp::SmtpDestination, testdst::TestDestination},
+    destinations::{exec::ExecDestination, smtp::SmtpDestination, testdst::TestDestination},
     retryagents::{filesystem::FilesystemRetryAgent, memory::MemoryRetryAgent},
     sources::{imap_idle::ImapIdleSource, imap_poll::ImapPollSource, testsrc::TestSource},
 };
@@ -17,14 +17,16 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct Mail {
+    pub from_src: String,
     pub data: Vec<u8>,
     pub hash: String,
 }
 impl Mail {
-    pub fn from_rfc822(body: Vec<u8>) -> Self {
+    pub fn from_rfc822(srcname: String, body: Vec<u8>) -> Self {
         let mut hasher = DefaultHasher::new();
         body.hash(&mut hasher);
         Self {
+            from_src: srcname,
             data: body,
             hash: hasher.finish().to_string(),
         }
@@ -243,6 +245,9 @@ impl MailHub {
                 DestinationConfig::Smtp(config) => {
                     Box::new(SmtpDestination::new(dstname.clone(), config))
                 }
+                DestinationConfig::Exec(config) => {
+                    Box::new(ExecDestination::new(dstname.clone(), config))
+                }
             };
             destination_agents.insert(dstname.clone(), destination_agent);
         }
@@ -250,7 +255,7 @@ impl MailHub {
         // Create sources
         for (srcname, srccfg) in &config.sources {
             let source_agent: Box<dyn MailSource> = match srccfg {
-                SourceConfig::Test => Box::new(TestSource::new()),
+                SourceConfig::Test => Box::new(TestSource::new(srcname.clone())),
                 SourceConfig::ImapPoll(config) => {
                     Box::new(ImapPollSource::new(srcname.clone(), config))
                 }

@@ -11,6 +11,14 @@
 				"password": "mysupersecretpassword"
 			},
 			"recipient": "destination@example.org"
+		},
+		"execdst": {
+			"type": "exec",
+			"executable": "/usr/bin/my_executable",
+			"arguments": [ "some cli argument" ],
+			"environment": {
+				"SPECIAL_ENV_VAR": "Mom said I'm special"
+			}
 		}
 	},
 	"sources": {

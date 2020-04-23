@@ -111,6 +111,14 @@ pub struct TestDestinationConfig {
     pub fail_n_first: u16,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ExecDestinationConfig {
+    pub executable: String,
+    pub arguments: Option<Vec<String>>,
+    pub environment: Option<HashMap<String, String>>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(tag = "type")]
@@ -119,6 +127,8 @@ pub enum DestinationConfig {
     Test(TestDestinationConfig),
     #[serde(rename = "smtp")]
     Smtp(SmtpDestinationConfig),
+    #[serde(rename = "exec")]
+    Exec(ExecDestinationConfig),
 }
 
 // #############
