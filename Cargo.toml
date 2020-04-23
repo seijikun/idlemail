@@ -18,7 +18,7 @@ mime = "0"
 time = "0.2"
 chrono = "0"
 email = "0"
-lettre = { git = "https://github.com/lettre/lettre" }
+lettre = { git = "https://github.com/lettre/lettre", rev = "a440ae5c79a18242a376deb0c28426ef092e32ab" }
 async-imap = "0"
 async-std = "1"
 futures = "0.3"
