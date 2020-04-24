@@ -54,6 +54,7 @@
 	},
 	"retryagent": {
 		"type": "filesystem",
+		"delay": 60,
 		"path": "/tmp/idlemail_retryagent"
 	}
 }
