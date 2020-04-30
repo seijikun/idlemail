@@ -1,5 +1,9 @@
 use crate::hub::{Mail, MailAgent, MailSource};
-use lettre::builder::EmailBuilder;
+use lettre::{
+    header,
+    message::{Mailbox, MultiPart, SinglePart},
+    Message,
+};
 
 pub struct TestSource {
     name: String,
@@ -14,19 +18,28 @@ impl MailAgent for TestSource {
 }
 impl MailSource for TestSource {
     fn start(&mut self, channel: crate::hub::HubSourceChannel) {
-        let mail = EmailBuilder::new()
-            .from("sender@example.org")
-            .to("receiver@example.or")
-            .subject("Test Email")
-            .date(&time::OffsetDateTime::now())
-            .text("plain/Text")
-            .html("<b>html/text</b>")
-            .attachment(b"Test-Content", "test.txt", &mime::TEXT_PLAIN)
-            .unwrap()
-            .build()
-            .unwrap();
-        let mail_data = mail.message_to_string().unwrap().as_bytes().to_vec();
+        let body_html = SinglePart::builder()
+            .header(header::ContentType(
+                "text/html; charset=utf8".parse().unwrap(),
+            ))
+            .body("<b>text/html</b>");
+        let body_text = SinglePart::builder()
+            .header(header::ContentType(
+                "text/plain; charset=utf8".parse().unwrap(),
+            ))
+            .body("text/plain");
+        let body = MultiPart::alternative()
+            .singlepart(body_html)
+            .singlepart(body_text);
 
-        channel.notify_new_mail(Mail::from_rfc822(self.name.clone(), mail_data));
+        let mail = Message::builder()
+            .from(Mailbox::new(None, "sender@example.org".parse().unwrap()))
+            .to(Mailbox::new(None, "receiver@example.or".parse().unwrap()))
+            .subject("Test Email")
+            .date_now()
+            .multipart(body)
+            .unwrap();
+
+        channel.notify_new_mail(Mail::from_rfc822(self.name.clone(), mail.formatted()));
     }
 }

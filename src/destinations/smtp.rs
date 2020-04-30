@@ -3,11 +3,12 @@ use crate::{
     hub::{DestinationMessage, HubDestinationChannel, MailAgent, MailDestination},
 };
 use lettre::{
-    smtp::{
+    address::Address as EmailAddress,
+    transport::smtp::{
         authentication as auth, client::net::ClientTlsParameters, ClientSecurity,
         ConnectionReuseParameters,
     },
-    EmailAddress, Envelope, SmtpClient, Transport,
+    Envelope, SmtpClient, Transport,
 };
 use log::{error, info, trace};
 use native_tls::TlsConnector;
@@ -39,10 +40,20 @@ impl MailAgent for SmtpDestination {
 impl MailDestination for SmtpDestination {
     fn start(&mut self, channel: HubDestinationChannel) {
         info!(target: &self.log_target, "Starting");
-        trace!(target: &self.log_target, "Using Configuration:\n{:?}", self.config);
-
         let log_target = self.log_target.clone();
+        let recipient: EmailAddress = match self.config.recipient.parse() {
+            Ok(recipient) => recipient,
+            Err(err) => {
+                error!(
+                    target: &log_target,
+                    "Configured recipient is not a valid mail address: {}", err
+                );
+                return;
+            }
+        };
+        trace!(target: &self.log_target, "Using Configuration:\n{:?}", self.config);
         let config = self.config.clone();
+
         self.worker = Some(thread::spawn(move || {
             // construct connection security settings
             let mut tls_builder = TlsConnector::builder();
@@ -78,7 +89,6 @@ impl MailDestination for SmtpDestination {
             }
 
             let mut mailer = mailer.transport();
-            let recipient = EmailAddress::new(config.recipient).unwrap();
 
             while let Ok(msg) = channel.next() {
                 match msg {
@@ -87,14 +97,9 @@ impl MailDestination for SmtpDestination {
                         return;
                     }
                     DestinationMessage::Mail { mail } => {
-                        // Construct mail
-                        let enveloped_mail = lettre::Email::new(
-                            Envelope::new(None, vec![recipient.clone()]).unwrap(),
-                            "".to_owned(),
-                            mail.data.clone(),
-                        );
-                        // Send mail
-                        match mailer.send(enveloped_mail) {
+                        // Send raw mail using constructed envelope
+                        let evenlope = Envelope::new(None, vec![recipient.clone()]).unwrap();
+                        match mailer.send_raw(&evenlope, &mail.data) {
                             Ok(_) => info!(target: &log_target, "Successfully sent mail"),
                             Err(err) => {
                                 error!(target: &log_target, "Error while sending mail:\n{}", err);
