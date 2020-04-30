@@ -90,25 +90,18 @@ impl MailDestination for SmtpDestination {
 
             let mut mailer = mailer.transport();
 
-            while let Ok(msg) = channel.next() {
-                match msg {
-                    DestinationMessage::Shutdown => {
-                        info!(target: &log_target, "Stopping");
-                        return;
-                    }
-                    DestinationMessage::Mail { mail } => {
-                        // Send raw mail using constructed envelope
-                        let evenlope = Envelope::new(None, vec![recipient.clone()]).unwrap();
-                        match mailer.send_raw(&evenlope, &mail.data) {
-                            Ok(_) => info!(target: &log_target, "Successfully sent mail"),
-                            Err(err) => {
-                                error!(target: &log_target, "Error while sending mail:\n{}", err);
-                                channel.notify_failed_send(mail);
-                            }
-                        }
+            while let Ok(DestinationMessage::Mail { mail }) = channel.next() {
+                // Send raw mail using constructed envelope
+                let evenlope = Envelope::new(None, vec![recipient.clone()]).unwrap();
+                match mailer.send_raw(&evenlope, &mail.data) {
+                    Ok(_) => info!(target: &log_target, "Successfully sent mail"),
+                    Err(err) => {
+                        error!(target: &log_target, "Error while sending mail:\n{}", err);
+                        channel.notify_failed_send(mail);
                     }
                 }
             }
+            info!(target: &log_target, "Stopping");
         }));
     }
 }

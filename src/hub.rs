@@ -44,7 +44,7 @@ pub struct HubChannel {
     recv: mpsc::Receiver<HubMessage>,
     destinations: HashMap<String, mpsc::Sender<DestinationMessage>>,
     sources: HashMap<String, async_mpsc::Sender<SourceMessage>>,
-    retryagent_sender: mpsc::Sender<RetryAgentMessage>,
+    retryagent_sender: Option<mpsc::Sender<RetryAgentMessage>>,
     retryagent_recv: Option<mpsc::Receiver<RetryAgentMessage>>,
 }
 impl HubChannel {
@@ -56,7 +56,7 @@ impl HubChannel {
             recv: main_recv,
             destinations: HashMap::new(),
             sources: HashMap::new(),
-            retryagent_sender,
+            retryagent_sender: Some(retryagent_sender),
             retryagent_recv: Some(retryagent_recv),
         }
     }
@@ -75,6 +75,8 @@ impl HubChannel {
     pub fn queue_mail_for_retry(&self, dstname: String, mail: Mail) {
         if self
             .retryagent_sender
+            .as_ref()
+            .unwrap()
             .send(RetryAgentMessage::QueueMail { dstname, mail })
             .is_err()
         {
@@ -82,23 +84,17 @@ impl HubChannel {
         }
     }
 
-    pub fn shutdown_sources(&self) {
-        for (srcname, src) in &self.sources {
-            info!(target: "HubChannel", "Signaling shutdown to source: {}", srcname);
-            task::block_on(src.send(SourceMessage::Shutdown));
-        }
+    pub fn shutdown_sources(&mut self) {
+        info!(target: "HubChannel", "Signaling shutdown to sources");
+        self.sources.clear();
     }
-    pub fn shutdown_destinations(&self) {
-        for (dstname, dst) in &self.destinations {
-            info!(target: "HubChannel", "Signaling shutdown to destination: {}", dstname);
-            dst.send(DestinationMessage::Shutdown).unwrap();
-        }
+    pub fn shutdown_destinations(&mut self) {
+        info!(target: "HubChannel", "Signaling shutdown to destinations");
+        self.destinations.clear();
     }
-    pub fn shutdown_retryagent(&self) {
+    pub fn shutdown_retryagent(&mut self) {
         info!(target: "HubChannel", "Signaling shutdown to retryagent");
-        self.retryagent_sender
-            .send(RetryAgentMessage::Shutdown)
-            .unwrap();
+        drop(self.retryagent_sender.take());
     }
 
     pub fn get_stop_channel(&self) -> HubStopSender {
@@ -143,7 +139,6 @@ impl HubStopSender {
 
 pub enum DestinationMessage {
     Mail { mail: Mail },
-    Shutdown,
 }
 pub struct HubDestinationChannel {
     name: String,
@@ -165,9 +160,7 @@ impl HubDestinationChannel {
     }
 }
 
-pub enum SourceMessage {
-    Shutdown,
-}
+pub enum SourceMessage {}
 pub struct HubSourceChannel {
     name: String,
     sender: mpsc::Sender<HubMessage>,
@@ -177,8 +170,13 @@ impl HubSourceChannel {
     pub async fn next(&self) -> Option<SourceMessage> {
         self.recv.recv().await
     }
-    pub fn next_timeout(&self, timeout: Duration) -> Option<SourceMessage> {
-        task::block_on(await_timeout(timeout, self.recv.recv())).unwrap_or(None)
+    pub fn next_timeout(&self, timeout: Duration) -> Result<SourceMessage, mpsc::RecvTimeoutError> {
+        // match async interface to synchrnous std interface for consistency
+        match task::block_on(await_timeout(timeout, self.recv.recv())) {
+            Ok(Some(msg)) => Ok(msg),
+            Ok(None) => Err(mpsc::RecvTimeoutError::Disconnected),
+            Err(_) => Err(mpsc::RecvTimeoutError::Timeout),
+        }
     }
     pub fn notify_new_mail(&self, mail: Mail) {
         self.sender
@@ -192,15 +190,17 @@ impl HubSourceChannel {
 
 pub enum RetryAgentMessage {
     QueueMail { dstname: String, mail: Mail },
-    Shutdown,
 }
 pub struct HubRetryAgentChannel {
     sender: mpsc::Sender<HubMessage>,
     recv: mpsc::Receiver<RetryAgentMessage>,
 }
 impl HubRetryAgentChannel {
-    pub fn next_timeout(&self, timeout: Duration) -> Option<RetryAgentMessage> {
-        self.recv.recv_timeout(timeout).ok()
+    pub fn next_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<RetryAgentMessage, mpsc::RecvTimeoutError> {
+        self.recv.recv_timeout(timeout)
     }
     pub fn notify_retry_mail(&self, dstname: String, mail: Mail) {
         self.sender

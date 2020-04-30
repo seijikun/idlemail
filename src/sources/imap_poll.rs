@@ -5,7 +5,7 @@ use crate::{
 };
 use async_std::task;
 use log::{debug, error, info, trace, warn};
-use std::{thread, time::Duration};
+use std::{sync::mpsc, thread, time::Duration};
 
 pub struct ImapPollSource {
     name: String,
@@ -85,15 +85,13 @@ impl MailSource for ImapPollSource {
                 }
 
                 // sleep until next poll is due - interrupt if requested to stop
-                if channel
-                    .next_timeout(Duration::from_secs(config.interval))
-                    .is_some()
-                {
-                    // received stop request -> return, otherwise, do next poll round
-                    info!(target: &log_target, "Stopping");
-                    return;
+                match channel.next_timeout(Duration::from_secs(config.interval)) {
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break, // shutdown
+                    _ => panic!(), // There currently are no SourceMessages
                 }
             }
+            info!(target: &log_target, "Stopping");
         }));
     }
 }

@@ -5,6 +5,7 @@ use crate::{
 use log::{info, warn};
 use std::{
     collections::VecDeque,
+    sync::mpsc,
     thread,
     time::{Duration, SystemTime},
 };
@@ -41,27 +42,30 @@ impl MailRetryAgent for MemoryRetryAgent {
             let mut queue: VecDeque<(SystemTime, String, Mail)> = VecDeque::new();
 
             loop {
-                if let Some(msg) = channel.next_timeout(Duration::from_secs(1)) {
-                    // got a new message, handle it
-                    match msg {
-                        RetryAgentMessage::Shutdown => {
-                            info!(target: &log_target, "Stopping");
-                            if !queue.is_empty() {
-                                warn!(target: &log_target, "There were {} mails queued for retry. These are permanently lost.", queue.len());
-                            }
-                            return;
-                        }
-                        RetryAgentMessage::QueueMail { dstname, mail } => {
-                            let retransmission_timepoint =
-                                SystemTime::now() + Duration::from_secs(config.delay);
-                            info!(
+                match channel.next_timeout(Duration::from_secs(1)) {
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        // shutdown
+                        if !queue.is_empty() {
+                            warn!(
                                 target: &log_target,
-                                "Queueing mail for retransmission in {}s", config.delay
+                                "There were {} mails queued for retry. These are permanently lost.",
+                                queue.len()
                             );
-                            queue.push_back((retransmission_timepoint, dstname, mail));
                         }
+                        break;
+                    }
+                    Ok(RetryAgentMessage::QueueMail { dstname, mail }) => {
+                        let retransmission_timepoint =
+                            SystemTime::now() + Duration::from_secs(config.delay);
+                        info!(
+                            target: &log_target,
+                            "Queueing mail for retransmission in {}s", config.delay
+                        );
+                        queue.push_back((retransmission_timepoint, dstname, mail));
                     }
                 }
+
                 // see if any of the queued mails is due
                 let now = SystemTime::now();
                 for i in 0..queue.len() {
@@ -79,6 +83,7 @@ impl MailRetryAgent for MemoryRetryAgent {
                     }
                 }
             }
+            info!(target: &log_target, "Stopping");
         }));
     }
 }

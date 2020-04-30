@@ -7,7 +7,9 @@ use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
-    fs, thread,
+    fs,
+    sync::mpsc,
+    thread,
     time::{Duration, SystemTime},
 };
 
@@ -113,66 +115,60 @@ impl MailRetryAgent for FilesystemRetryAgent {
             let mut queue: VecDeque<QueuedRetryMail> = VecDeque::from(restored_mails);
 
             loop {
-                if let Some(msg) = channel.next_timeout(Duration::from_secs(1)) {
-                    // got a new message, handle it
-                    match msg {
-                        RetryAgentMessage::Shutdown => {
-                            info!(target: &log_target, "Stopping");
-                            return;
-                        }
-                        RetryAgentMessage::QueueMail { dstname, mail } => {
-                            let retransmission_timepoint =
-                                SystemTime::now() + Duration::from_secs(config.delay);
-                            info!(
-                                target: &log_target,
-                                "Queueing mail {} for retransmission in {}s",
-                                mail.hash,
-                                config.delay
-                            );
+                match channel.next_timeout(Duration::from_secs(1)) {
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break, // shutdown
+                    Ok(RetryAgentMessage::QueueMail { dstname, mail }) => {
+                        let retransmission_timepoint =
+                            SystemTime::now() + Duration::from_secs(config.delay);
+                        info!(
+                            target: &log_target,
+                            "Queueing mail {} for retransmission in {}s", mail.hash, config.delay
+                        );
 
-                            // construct QueuedRetryMail structure, and attempt to find a non-taken filename
-                            // for it in our designated filesystem path.
-                            let mut retry_mail = QueuedRetryMail {
-                                due_time: retransmission_timepoint,
-                                dstname,
-                                mail,
-                                file_path: "".to_owned(),
-                            };
-                            for i in 0..10 {
-                                // try 10 append-indices against hash-collision
-                                let file_name = format!(
-                                    "{}/{}_to_{}-{}.json",
-                                    config.path, &retry_mail.mail.hash, retry_mail.dstname, i
-                                );
-                                if let Ok(retry_file) = fs::File::create(&file_name) {
-                                    retry_mail.file_path = file_name.clone();
-                                    match serde_json::to_writer(
-                                        retry_file,
-                                        &QueuedRetryMailModel::from(&retry_mail),
-                                    ) {
-                                        Ok(_) => {
-                                            debug!(
-                                                target: &log_target,
-                                                "Stored retry-mail in: {}", retry_mail.file_path
-                                            );
-                                            queue.push_back(retry_mail);
-                                            break;
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                target: &log_target,
-                                                "Failed to create retry-mail file: {}\n{}",
-                                                retry_mail.file_path,
-                                                e
-                                            );
-                                            continue;
-                                        }
+                        // construct QueuedRetryMail structure, and attempt to find a non-taken filename
+                        // for it in our designated filesystem path.
+                        let mut retry_mail = QueuedRetryMail {
+                            due_time: retransmission_timepoint,
+                            dstname,
+                            mail,
+                            file_path: "".to_owned(),
+                        };
+                        for i in 0..10 {
+                            // try 10 append-indices against hash-collision
+                            let file_name = format!(
+                                "{}/{}_to_{}-{}.json",
+                                config.path, &retry_mail.mail.hash, retry_mail.dstname, i
+                            );
+                            if let Ok(retry_file) = fs::File::create(&file_name) {
+                                retry_mail.file_path = file_name.clone();
+                                match serde_json::to_writer(
+                                    retry_file,
+                                    &QueuedRetryMailModel::from(&retry_mail),
+                                ) {
+                                    Ok(_) => {
+                                        debug!(
+                                            target: &log_target,
+                                            "Stored retry-mail in: {}", retry_mail.file_path
+                                        );
+                                        queue.push_back(retry_mail);
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            target: &log_target,
+                                            "Failed to create retry-mail file: {}\n{}",
+                                            retry_mail.file_path,
+                                            e
+                                        );
+                                        continue;
                                     }
                                 }
                             }
                         }
                     }
                 }
+
                 // see if any of the queued mails is due
                 let now = SystemTime::now();
                 while !queue.is_empty() {
@@ -201,6 +197,7 @@ impl MailRetryAgent for FilesystemRetryAgent {
                     }
                 }
             }
+            info!(target: &log_target, "Stopping");
         }));
     }
 }
