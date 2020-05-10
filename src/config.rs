@@ -32,6 +32,11 @@ impl ConfigContainer {
                 }
             }
         }
+        for (srcname, _) in &self.sources {
+            if self.mappings.get(srcname).is_none() {
+                return Err(format!("Source: {} has no mapping", srcname));
+            }
+        }
         if let Some(retry_agent) = &self.retryagent {
             if let RetryAgentConfig::Filesystem(config) = retry_agent {
                 if !Path::new(&config.path).exists() {
