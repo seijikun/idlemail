@@ -168,13 +168,13 @@ pub struct HubSourceChannel {
 }
 impl HubSourceChannel {
     pub async fn next(&self) -> Option<SourceMessage> {
-        self.recv.recv().await
+        self.recv.recv().await.ok()
     }
     pub fn next_timeout(&self, timeout: Duration) -> Result<SourceMessage, mpsc::RecvTimeoutError> {
         // match async interface to synchrnous std interface for consistency
         match task::block_on(await_timeout(timeout, self.recv.recv())) {
-            Ok(Some(msg)) => Ok(msg),
-            Ok(None) => Err(mpsc::RecvTimeoutError::Disconnected),
+            Ok(Ok(msg)) => Ok(msg),
+            Ok(Err(_)) => Err(mpsc::RecvTimeoutError::Disconnected),
             Err(_) => Err(mpsc::RecvTimeoutError::Timeout),
         }
     }
