@@ -179,8 +179,7 @@ impl ImapConnection {
             self.run(|sess| {
                 task::block_on(sess.select(mailbox.name()))?;
                 task::block_on(sess.search("UNDELETED UNSEEN"))
-            })
-            .unwrap()
+            })?
             .into_iter(),
         );
         Ok(UnseenMailIterator {
