@@ -1,9 +1,5 @@
 use crate::hub::{Mail, MailAgent, MailSource};
-use lettre::{
-    header,
-    message::{Mailbox, MultiPart, SinglePart},
-    Message,
-};
+use lettre::{Message, message::{header, Mailbox, MultiPart, SinglePart}};
 
 pub struct TestSource {
     name: String,
@@ -22,12 +18,12 @@ impl MailSource for TestSource {
             .header(header::ContentType(
                 "text/html; charset=utf8".parse().unwrap(),
             ))
-            .body("<b>text/html</b>");
+            .body("<b>text/html</b>".to_owned());
         let body_text = SinglePart::builder()
             .header(header::ContentType(
                 "text/plain; charset=utf8".parse().unwrap(),
             ))
-            .body("text/plain");
+            .body("text/plain".to_owned());
         let body = MultiPart::alternative()
             .singlepart(body_html)
             .singlepart(body_text);

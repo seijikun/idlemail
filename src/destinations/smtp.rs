@@ -2,16 +2,8 @@ use crate::{
     config::{AuthMethod, SmtpDestinationConfig},
     hub::{DestinationMessage, HubDestinationChannel, MailAgent, MailDestination},
 };
-use lettre::{
-    address::Address as EmailAddress,
-    transport::smtp::{
-        authentication as auth, client::net::ClientTlsParameters, ClientSecurity,
-        ConnectionReuseParameters,
-    },
-    Envelope, SmtpClient, Transport,
-};
+use lettre::{Address, address::Envelope, SmtpTransport, transport::smtp::authentication as auth, Transport};
 use log::{error, info, trace};
-use native_tls::TlsConnector;
 use std::thread;
 
 pub struct SmtpDestination {
@@ -41,7 +33,7 @@ impl MailDestination for SmtpDestination {
     fn start(&mut self, channel: HubDestinationChannel) {
         info!(target: &self.log_target, "Starting");
         let log_target = self.log_target.clone();
-        let recipient: EmailAddress = match self.config.recipient.parse() {
+        let recipient: Address = match self.config.recipient.parse() {
             Ok(recipient) => recipient,
             Err(err) => {
                 error!(
@@ -55,40 +47,32 @@ impl MailDestination for SmtpDestination {
         let config = self.config.clone();
 
         self.worker = Some(thread::spawn(move || {
-            // construct connection security settings
-            let mut tls_builder = TlsConnector::builder();
-            tls_builder.min_protocol_version(Some(native_tls::Protocol::Tlsv11));
-            let tls_parameters =
-                ClientTlsParameters::new(config.server.clone(), tls_builder.build().unwrap());
-            let security_settings = if config.ssl {
-                ClientSecurity::Wrapper(tls_parameters)
+            let mut connection_builder = if config.ssl {
+                SmtpTransport::relay(&config.server)
             } else {
-                ClientSecurity::Required(tls_parameters)
-            };
+                SmtpTransport::starttls_relay(&config.server)
+            }.expect("Failed to initialize smtp client");
 
-            // construct smtp client
-            let mut mailer =
-                SmtpClient::new((config.server.as_str(), config.port), security_settings)
-                    .expect("Failed to initialize smtp client")
-                    .connection_reuse(ConnectionReuseParameters::ReuseUnlimited);
+            connection_builder = connection_builder
+                .port(config.port);
 
             // configure authentication
             if let Some(auth) = config.auth {
                 match auth {
                     AuthMethod::Plain { user, password } => {
-                        mailer = mailer
+                        connection_builder = connection_builder
                             .credentials(auth::Credentials::new(user, password))
-                            .authentication_mechanism(auth::Mechanism::Plain);
+                            .authentication(vec![auth::Mechanism::Plain]);
                     }
                     AuthMethod::Login { user, password } => {
-                        mailer = mailer
+                        connection_builder = connection_builder
                             .credentials(auth::Credentials::new(user, password))
-                            .authentication_mechanism(auth::Mechanism::Login);
+                            .authentication(vec![auth::Mechanism::Login]);
                     }
                 }
             }
 
-            let mut mailer = mailer.transport();
+            let mailer = connection_builder.build();
 
             while let Ok(DestinationMessage::Mail { mail }) = channel.next() {
                 // Send raw mail using constructed envelope

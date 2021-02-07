@@ -7,15 +7,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "^0.4"
-pretty_env_logger = "^0.4"
-anyhow = "^1.0"
-serde = "^1.0"
-serde_json = "^1.0"
-serde_derive = "^1.0"
-signal = "^0.7"
-time = "^0.2"
-lettre = { git = "https://github.com/lettre/lettre", rev = "123794a00dc8a2a03cfd7c7af273d5ffc178dc55" }
+log = "0.4"
+pretty_env_logger = "0.4"
+anyhow = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+signal = "0.7"
+time = "0.2"
+lettre = { version = "0.10.0-alpha.5", features = [ "smtp-transport", "builder" ] }
 # temporary workaround until merge of: https://github.com/async-email/async-imap/pull/41
 async-imap = { git = "https://github.com/seijikun/async-imap.git" }
 async-std = "1.8.0"
