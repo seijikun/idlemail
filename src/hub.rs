@@ -5,7 +5,7 @@ use crate::{
     retryagents::{filesystem::FilesystemRetryAgent, memory::MemoryRetryAgent},
     sources::{imap_idle::ImapIdleSource, imap_poll::ImapPollSource, testsrc::TestSource},
 };
-use async_std::{future::timeout as await_timeout, channel as async_mpsc, task};
+use async_std::{channel as async_mpsc, future::timeout as await_timeout, task};
 use log::{info, warn};
 use mpsc::RecvError;
 use std::{

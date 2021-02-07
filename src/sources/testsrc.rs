@@ -1,5 +1,8 @@
 use crate::hub::{Mail, MailAgent, MailSource};
-use lettre::{Message, message::{header, Mailbox, MultiPart, SinglePart}};
+use lettre::{
+    message::{header, Mailbox, MultiPart, SinglePart},
+    Message,
+};
 
 pub struct TestSource {
     name: String,

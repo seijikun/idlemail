@@ -89,7 +89,8 @@ impl MailSource for ImapIdleSource {
                     }
                 }
 
-                loop { // inner loop used only if something fails while entering IDLE state and we need to retry
+                loop {
+                    // inner loop used only if something fails while entering IDLE state and we need to retry
                     debug!(
                         target: &log_target,
                         "Entering IMAP IDLE to wait for server notification"
@@ -97,7 +98,11 @@ impl MailSource for ImapIdleSource {
                     match con.run(|sess| task::block_on(sess.select(config.path.clone()))) {
                         Ok(_) => {}
                         Err(e) => {
-                            error!(target: &log_target, "Failed to enter IMAP IDLE state:\n{}", e.backtrace());
+                            error!(
+                                target: &log_target,
+                                "Failed to enter IMAP IDLE state:\n{}",
+                                e.backtrace()
+                            );
                             // connection-lost errors should be handled by the connection, so this could
                             // be an authentication error, or a temporary unavailable server. Wait a bit and retry
                             thread::sleep(Duration::from_secs(5));
@@ -107,7 +112,11 @@ impl MailSource for ImapIdleSource {
                     let mut idle_handle = match con.idle() {
                         Ok(idle_handle) => idle_handle,
                         Err(e) => {
-                            error!(target: &log_target, "Failed to enter IMAP IDLE state:\n{}", e.backtrace());
+                            error!(
+                                target: &log_target,
+                                "Failed to enter IMAP IDLE state:\n{}",
+                                e.backtrace()
+                            );
                             thread::sleep(Duration::from_secs(5));
                             continue;
                         }
@@ -115,7 +124,7 @@ impl MailSource for ImapIdleSource {
                     // dropping the StopSource interrupts idle, the variable thus needs a name.
                     let (idle_future, _stopsrc) =
                         idle_handle.wait_with_timeout(Duration::from_secs(config.renewinterval));
-    
+
                     // await either a wake-up from the IMAP server, or a request to shutdown
                     let idle_future = idle_future.fuse();
                     pin_mut!(idle_future);

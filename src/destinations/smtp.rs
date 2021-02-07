@@ -2,7 +2,9 @@ use crate::{
     config::{AuthMethod, SmtpDestinationConfig},
     hub::{DestinationMessage, HubDestinationChannel, MailAgent, MailDestination},
 };
-use lettre::{Address, address::Envelope, SmtpTransport, transport::smtp::authentication as auth, Transport};
+use lettre::{
+    address::Envelope, transport::smtp::authentication as auth, Address, SmtpTransport, Transport,
+};
 use log::{error, info, trace};
 use std::thread;
 
@@ -51,10 +53,10 @@ impl MailDestination for SmtpDestination {
                 SmtpTransport::relay(&config.server)
             } else {
                 SmtpTransport::starttls_relay(&config.server)
-            }.expect("Failed to initialize smtp client");
+            }
+            .expect("Failed to initialize smtp client");
 
-            connection_builder = connection_builder
-                .port(config.port);
+            connection_builder = connection_builder.port(config.port);
 
             // configure authentication
             if let Some(auth) = config.auth {

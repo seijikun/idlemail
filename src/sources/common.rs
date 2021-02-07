@@ -121,9 +121,7 @@ impl ImapConnection {
 
     async fn fetch_mail(&self, message_id: String) -> Result<async_imap::types::Fetch> {
         let mut session_borrow = self.session()?;
-        let mut message_stream = session_borrow
-            .fetch(&message_id, "RFC822")
-            .await?;
+        let mut message_stream = session_borrow.fetch(&message_id, "RFC822").await?;
         if let Some(message) = message_stream.next().await {
             Ok(message?)
         } else {
@@ -153,7 +151,8 @@ impl ImapConnection {
         let expunge_result: Vec<ImapResult<_>> = self
             .session()?
             .expunge()
-            .await.context("Failed to delete messages marked for deletion")?
+            .await
+            .context("Failed to delete messages marked for deletion")?
             .collect()
             .await;
         let expunge_result: ImapResult<Vec<_>> = expunge_result.into_iter().collect();
