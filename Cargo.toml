@@ -16,7 +16,7 @@ serde_derive = "^1.0"
 signal = "^0.7"
 time = "^0.2"
 lettre = { git = "https://github.com/lettre/lettre", rev = "123794a00dc8a2a03cfd7c7af273d5ffc178dc55" }
-async-imap = "^0.2"
+async-imap = "^0.4"
 async-std = "~1.6.0"
 futures = "^0.3"
 async-native-tls = "^0.3"
