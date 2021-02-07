@@ -8,7 +8,6 @@ use std::{
     borrow::BorrowMut,
     cell::{RefCell, RefMut},
     collections::VecDeque,
-    iter::FromIterator,
     vec,
 };
 
@@ -183,13 +182,13 @@ impl ImapConnection {
 
     pub fn iter_unseen(&self, mailbox: &MailboxName) -> Result<UnseenMailIterator> {
         // select new mailbox and get a list of new/unseen messages
-        let unread_mails = Vec::from_iter(
-            self.run(|sess| {
+        let unread_mails: Vec<_> = self
+            .run(|sess| {
                 task::block_on(sess.select(mailbox.name()))?;
                 task::block_on(sess.search("UNDELETED UNSEEN"))
             })?
-            .into_iter(),
-        );
+            .into_iter()
+            .collect();
         Ok(UnseenMailIterator {
             con: self,
             unread_mails: VecDeque::from(unread_mails),
