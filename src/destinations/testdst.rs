@@ -20,7 +20,13 @@ impl TestDestination {
     }
 }
 impl MailAgent for TestDestination {
-    fn join(&mut self) {}
+    fn join(&mut self) {
+        self.worker
+            .take()
+            .unwrap()
+            .join()
+            .expect("Thread exited with errors");
+    }
 }
 impl MailDestination for TestDestination {
     fn start(&mut self, channel: HubDestinationChannel) {
