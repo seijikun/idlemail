@@ -5,7 +5,7 @@ use crate::{
     retryagents::{filesystem::FilesystemRetryAgent, memory::MemoryRetryAgent},
     sources::{imap_idle::ImapIdleSource, imap_poll::ImapPollSource, testsrc::TestSource},
 };
-use async_std::{future::timeout as await_timeout, sync as async_mpsc, task};
+use async_std::{future::timeout as await_timeout, channel as async_mpsc, task};
 use log::{info, warn};
 use mpsc::RecvError;
 use std::{
@@ -112,7 +112,7 @@ impl HubChannel {
         }
     }
     pub fn get_source_channel(&mut self, name: String) -> HubSourceChannel {
-        let (src_send, src_recv) = async_mpsc::channel(1);
+        let (src_send, src_recv) = async_mpsc::bounded(1);
         self.sources.insert(name.clone(), src_send);
         HubSourceChannel {
             name,

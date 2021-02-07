@@ -2,7 +2,8 @@ use crate::config::AuthMethod;
 use anyhow::{anyhow, Context, Result};
 use async_imap::types::Seq;
 use async_native_tls::{TlsConnector, TlsStream};
-use async_std::{net::TcpStream, prelude::*, task};
+use async_std::{net::TcpStream, task};
+use futures::StreamExt;
 use std::{
     borrow::BorrowMut,
     cell::{RefCell, RefMut},
@@ -106,27 +107,28 @@ impl ImapConnection {
     }
 
     async fn recursive_mailbox_list(&self) -> Result<Vec<async_imap::types::Name>> {
-        let result = self
+        let result: Vec<ImapResult<_>> = self
             .session()?
             .list(None, Some("*"))
             .await
             .context("Failed to acquire recursive list of mailboxes")?
-            .collect::<ImapResult<_>>()
-            .await
-            .context("Failed to acquire recursive list of mailboxes")?;
-        Ok(result)
+            .collect::<_>()
+            .await;
+        // fail if any single item in the stream failed
+        let result: ImapResult<Vec<_>> = result.into_iter().collect();
+        Ok(result?)
     }
 
     async fn fetch_mail(&self, message_id: String) -> Result<async_imap::types::Fetch> {
         let mut session_borrow = self.session()?;
-        let message_stream = session_borrow
-            .borrow_mut()
+        let mut message_stream = session_borrow
             .fetch(&message_id, "RFC822")
             .await?;
-        let mut messages: VecDeque<_> = message_stream.collect::<ImapResult<_>>().await?;
-        messages
-            .pop_front()
-            .ok_or_else(|| anyhow!("Failed to fetch message: {}", message_id))
+        if let Some(message) = message_stream.next().await {
+            Ok(message?)
+        } else {
+            Err(anyhow!("Failed to fetch message: {}", message_id))
+        }
     }
 
     pub async fn delete_mails(&self, message_ids: &[Seq]) -> Result<()> {
@@ -139,19 +141,26 @@ impl ImapConnection {
         });
 
         // Add \Delete flags to messages
-        let _updates: Vec<_> = self
+        let flag_result: Vec<ImapResult<_>> = self
             .session()?
             .store(id_list, "+FLAGS (\\Deleted)")
-            .await?
-            .collect::<ImapResult<_>>()
-            .await?;
-        // Expunge messages marked with \Delete
-        let _upates: Vec<_> = self
+            .await
+            .context("Failed to mark mails with Deleted flag")?
+            .collect()
+            .await;
+        let flag_result: ImapResult<Vec<_>> = flag_result.into_iter().collect();
+
+        let expunge_result: Vec<ImapResult<_>> = self
             .session()?
             .expunge()
-            .await?
-            .collect::<ImapResult<_>>()
-            .await?;
+            .await.context("Failed to delete messages marked for deletion")?
+            .collect()
+            .await;
+        let expunge_result: ImapResult<Vec<_>> = expunge_result.into_iter().collect();
+
+        // try to expunge the messages that were correctly marked, before throwing
+        flag_result?;
+        expunge_result?;
         Ok(())
     }
 
