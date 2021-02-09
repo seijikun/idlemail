@@ -255,7 +255,7 @@ impl MailHub {
         // Create sources
         for (srcname, srccfg) in &config.sources {
             let source_agent: Box<dyn MailSource> = match srccfg {
-                SourceConfig::Test => Box::new(TestSource::new(srcname.clone())),
+                SourceConfig::Test(config) => Box::new(TestSource::new(srcname.clone(), config)),
                 SourceConfig::ImapPoll(config) => {
                     Box::new(ImapPollSource::new(srcname.clone(), config))
                 }

@@ -81,12 +81,19 @@ pub struct ImapIdleSourceConfig {
     pub auth: AuthMethod,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct TestSourceConfig {
+    pub delay: u64,
+    pub interval: u64,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(tag = "type")]
 pub enum SourceConfig {
     #[serde(rename = "test")]
-    Test,
+    Test(TestSourceConfig),
     #[serde(rename = "imap_poll")]
     ImapPoll(ImapPollSourceConfig),
     #[serde(rename = "imap_idle")]
