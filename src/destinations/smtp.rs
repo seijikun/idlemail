@@ -49,12 +49,16 @@ impl MailDestination for SmtpDestination {
         let config = self.config.clone();
 
         self.worker = Some(thread::spawn(move || {
-            let mut connection_builder = if config.ssl {
-                SmtpTransport::relay(&config.server)
-            } else {
-                SmtpTransport::starttls_relay(&config.server)
-            }
-            .expect("Failed to initialize smtp client");
+            let mut connection_builder = match config.encryption {
+                crate::config::Encryption::None => SmtpTransport::builder_dangerous(&config.server),
+                crate::config::Encryption::Ssl => {
+                    SmtpTransport::relay(&config.server).expect("Failed to initialize smtp client")
+                }
+                crate::config::Encryption::Starttls => {
+                    SmtpTransport::starttls_relay(&config.server)
+                        .expect("Failed to initialize smtp client")
+                }
+            };
 
             connection_builder = connection_builder.port(config.port);
 

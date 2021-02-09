@@ -56,6 +56,18 @@ pub enum AuthMethod {
     Login { user: String, password: String },
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+#[serde(tag = "type")]
+pub enum Encryption {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "ssl")]
+    Ssl,
+    #[serde(rename = "starttls")]
+    Starttls,
+}
+
 // #############
 // # Sources
 // #############
@@ -109,7 +121,7 @@ pub enum SourceConfig {
 pub struct SmtpDestinationConfig {
     pub server: String,
     pub port: u16,
-    pub ssl: bool,
+    pub encryption: Encryption,
     pub auth: Option<AuthMethod>,
     pub recipient: String,
 }
@@ -117,7 +129,6 @@ pub struct SmtpDestinationConfig {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct TestDestinationConfig {
-    #[serde(rename = "failNFirst")]
     pub fail_n_first: u16,
 }
 
