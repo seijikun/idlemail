@@ -16,8 +16,7 @@ serde_derive = "1.0"
 signal = "0.7"
 time = "0.2"
 lettre = { version = "0.10.0-alpha.5", features = [ "smtp-transport", "builder" ] }
-# temporary workaround until merge of: https://github.com/async-email/async-imap/pull/41
-async-imap = { git = "https://github.com/seijikun/async-imap.git" }
+async-imap = { git = "https://github.com/async-email/async-imap.git", rev = "f4e7651d1467597778e485bc220a736d4c2af217" }
 async-std = "1.8.0"
 futures = "^0.3"
 async-native-tls = "^0.3"
