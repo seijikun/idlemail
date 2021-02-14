@@ -129,7 +129,7 @@ impl HubChannel {
 }
 
 pub struct HubStopSender {
-    sender: mpsc::Sender<HubMessage>,
+    pub(crate) sender: mpsc::Sender<HubMessage>,
 }
 impl HubStopSender {
     pub fn stop(&self) {
@@ -141,9 +141,9 @@ pub enum DestinationMessage {
     Mail { mail: Mail },
 }
 pub struct HubDestinationChannel {
-    name: String,
-    sender: mpsc::Sender<HubMessage>,
-    recv: mpsc::Receiver<DestinationMessage>,
+    pub(crate) name: String,
+    pub(crate) sender: mpsc::Sender<HubMessage>,
+    pub(crate) recv: mpsc::Receiver<DestinationMessage>,
 }
 impl HubDestinationChannel {
     pub fn next(&self) -> Result<DestinationMessage, RecvError> {
@@ -162,9 +162,9 @@ impl HubDestinationChannel {
 
 pub enum SourceMessage {}
 pub struct HubSourceChannel {
-    name: String,
-    sender: mpsc::Sender<HubMessage>,
-    recv: async_mpsc::Receiver<SourceMessage>,
+    pub(crate) name: String,
+    pub(crate) sender: mpsc::Sender<HubMessage>,
+    pub(crate) recv: async_mpsc::Receiver<SourceMessage>,
 }
 impl HubSourceChannel {
     pub async fn next(&self) -> Option<SourceMessage> {

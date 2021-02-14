@@ -131,3 +131,124 @@ impl MailDestination for ExecDestination {
         }));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hub::Mail;
+    use lettre::{
+        message::{header, Mailbox, MultiPart, SinglePart},
+        Message,
+    };
+    use std::{
+        collections::HashMap,
+        fs::{File, Permissions},
+        os::unix::prelude::PermissionsExt,
+        path::PathBuf,
+        sync::mpsc,
+    };
+    use tempfile::TempDir;
+    use test_case::test_case;
+
+    macro_rules! define_envargs_method(
+        { $name:ident : $($key:expr => $value:expr),+ } => {
+            fn $name() -> HashMap<String, String> {
+                let mut m = ::std::collections::HashMap::new();
+                $(
+                    m.insert($key, $value);
+                )+
+                m
+            }
+         };
+    );
+
+    fn create_testmail(srcname: String) -> Mail {
+        let body_html = SinglePart::builder()
+            .header(header::ContentType(
+                "text/html; charset=utf8".parse().unwrap(),
+            ))
+            .body("<b>text/html</b>".to_owned());
+        let body_text = SinglePart::builder()
+            .header(header::ContentType(
+                "text/plain; charset=utf8".parse().unwrap(),
+            ))
+            .body("text/plain".to_owned());
+        let body = MultiPart::alternative()
+            .singlepart(body_html)
+            .singlepart(body_text);
+
+        let testmail = Message::builder()
+            .from(Mailbox::new(None, "sender@example.org".parse().unwrap()))
+            .to(Mailbox::new(None, "receiver@example.or".parse().unwrap()))
+            .subject("Test Email")
+            .date_now()
+            .multipart(body)
+            .unwrap();
+        Mail::from_rfc822(srcname, testmail.formatted())
+    }
+
+    fn prepare_validation_script(src: &str) -> (TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let executable_path = dir.path().join("validation.sh");
+        {
+            let mut executable_file = File::create(&executable_path).unwrap();
+            executable_file.write_all(src.as_bytes()).unwrap();
+            executable_file
+                .set_permissions(Permissions::from_mode(0o774))
+                .unwrap();
+        }
+        (dir, executable_path)
+    }
+
+    define_envargs_method! {envargs_correct: "ENV_IDLEMAIL_TESTARG".to_owned() => "the correct testvalue".to_owned() }
+    define_envargs_method! {envargs_incorrect: "ENV_IDLEMAIL_TESTARG".to_owned() => "the incorrect testvalue".to_owned() }
+    define_envargs_method! {envargs_incorrect2: "ENV_IDLEMAIL_WRONGARG".to_owned() => "the incorrect testvalue".to_owned() }
+
+    #[test_case(vec!["ARG0", "ARG1"], envargs_correct() => true)]
+    #[test_case(vec!["ARG1", "ARG0"], envargs_correct() => false)]
+    #[test_case(vec!["ARG0", "ARG1"], envargs_incorrect() => false)]
+    #[test_case(vec!["ARG1", "ARG0"], envargs_incorrect() => false)]
+    #[test_case(vec!["ARG0", "ARG1"], envargs_incorrect2() => false)]
+    #[test_case(vec!["ARG1", "ARG0"], envargs_incorrect2() => false)]
+    #[test_case(vec!["ARG0"], HashMap::new() => false)]
+    fn test_successfull_execution(cliargs: Vec<&str>, env: HashMap<String, String>) -> bool {
+        let mail = create_testmail("unit-test source 0".to_owned());
+        let mailmd5 = format!("{:x}", md5::compute(&mail.data));
+        let (_dir, executable_path) = prepare_validation_script(&format!(
+            r#"#!/bin/bash
+            cd $(dirname "$0")
+            if [ "$1" != "ARG0" ]; then echo "Argument0 incorrect"; exit 1; fi
+            if [ "$2" != "ARG1" ]; then echo "Argument1 incorrect"; exit 1; fi
+            if [ "$IDLEMAIL_SOURCE" != "unit-test source 0" ]; then echo "Source ENV-Param incorrect"; exit 1; fi
+            if [ "$IDLEMAIL_DESTINATION" != "unit-test exec dst" ]; then echo "Destination ENV-param incorrect"; exit 1; fi
+            if [ "$ENV_IDLEMAIL_TESTARG" != "the correct testvalue" ]; then echo "Wrong custom env argument"; exit 1; fi
+            BODY_MD5=$(cat | md5sum | awk '{{ print $1 }}');
+            if [ "$BODY_MD5" != "{}" ]; then echo "Mail body Hash-Mismatch"; exit 1; fi
+        "#,
+            mailmd5
+        ));
+
+        let mut execdst = ExecDestination::new(
+            "unit-test exec dst".to_owned(),
+            &ExecDestinationConfig {
+                executable: executable_path.to_string_lossy().to_string(),
+                arguments: Some(cliargs.into_iter().map(|s| s.to_owned()).collect()),
+                environment: Some(env),
+            },
+        );
+        let (ra_send, ra_recv) = mpsc::channel();
+        {
+            let (dst_send, dst_recv) = mpsc::channel();
+            let dstchan = HubDestinationChannel {
+                name: "unit-test exec dst".to_owned(),
+                sender: ra_send,
+                recv: dst_recv,
+            };
+            execdst.start(dstchan);
+            dst_send.send(DestinationMessage::Mail { mail }).unwrap();
+        } // drop dst_send here, this signals the destination to exit
+        execdst.join();
+        let res = ra_recv.try_recv();
+        res.is_err()
+    }
+}

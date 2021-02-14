@@ -4,7 +4,7 @@
 			"type": "smtp",
 			"server": "smtp.example.org",
 			"port": 587,
-			"ssl": false,
+			"encryption": { "type": "starttls" },
 			"auth": {
 				"type": "plain",
 				"user": "destination@example.org",
