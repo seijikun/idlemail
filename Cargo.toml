@@ -21,3 +21,6 @@ async-std = "1.8.0"
 futures = "^0.3"
 async-native-tls = "^0.3"
 native-tls = "^0.2"
+
+# Temporary force funty version ( workaround for https://github.com/bitvecto-rs/bitvec/issues/105 )
+funty = "=1.1.0"
