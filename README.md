@@ -63,7 +63,7 @@ This destination uses the SMTP protocoll to deliver retrieved mails.
 Bear in mind, that you will most probably have to use authenticated SMTP, to be able to deliver a mail, which was originally sent from *a* to *b*, into a destination account *c*.
 
 #### Configuration parameters
-- `ssl`: Whether to use ssl (`true`) or plain/startls (`false`)
+- `encryption`: The encryption configuration
 - `recipient`: Mail address to deliver the mails to on the destination server
 
 ## Exec

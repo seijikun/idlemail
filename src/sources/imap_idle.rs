@@ -70,7 +70,7 @@ impl MailSource for ImapIdleSource {
                                         ));
                                     }
                                 });
-                            if !config.keep {
+                            if !config.keep && !unread_mails.is_empty() {
                                 if let Err(e) = task::block_on(con.delete_mails(&unread_mails)) {
                                     warn!(
                                         target: &log_target,
