@@ -2,4 +2,3 @@
 **/*.rs.bk
 testconfig*.json
 .vscode
-Cargo.lock

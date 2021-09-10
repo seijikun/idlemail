@@ -164,14 +164,10 @@ mod tests {
 
     fn create_testmail(srcname: String) -> Mail {
         let body_html = SinglePart::builder()
-            .header(header::ContentType(
-                "text/html; charset=utf8".parse().unwrap(),
-            ))
+            .header(header::ContentType::parse("text/html; charset=utf8").unwrap())
             .body("<b>text/html</b>".to_owned());
         let body_text = SinglePart::builder()
-            .header(header::ContentType(
-                "text/plain; charset=utf8".parse().unwrap(),
-            ))
+            .header(header::ContentType::parse("text/plain; charset=utf8").unwrap())
             .body("text/plain".to_owned());
         let body = MultiPart::alternative()
             .singlepart(body_html)
