@@ -338,7 +338,7 @@ impl MailHub {
             HubMessage::RetryMail { dstname, mail } => {
                 info!(target: "MailHub", "Distributing Mail [retry] => {}", dstname);
                 self.hubchannel
-                    .queue_mail_for_sending(&dstname, mail.clone())
+                    .queue_mail_for_sending(&dstname, mail)
                     .expect("Failed to distribute mail");
             }
         }
