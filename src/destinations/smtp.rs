@@ -1,12 +1,14 @@
 use crate::{
     config::{AuthMethod, SmtpDestinationConfig},
-    hub::{DestinationMessage, HubDestinationChannel, MailAgent, MailDestination},
+    hub::{DestinationMessage, HubDestinationChannel, MailAgent},
 };
 use lettre::{
     address::Envelope, transport::smtp::authentication as auth, Address, SmtpTransport, Transport,
 };
 use log::{error, info, trace};
 use std::thread;
+
+use super::MailDestination;
 
 pub struct SmtpDestination {
     log_target: String,

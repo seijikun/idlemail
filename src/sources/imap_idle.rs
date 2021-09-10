@@ -1,7 +1,10 @@
-use super::common::{ImapConnection, MailPath};
+use super::{
+    common::{ImapConnection, MailPath},
+    MailSource,
+};
 use crate::{
     config::ImapIdleSourceConfig,
-    hub::{HubSourceChannel, Mail, MailAgent, MailSource},
+    hub::{HubSourceChannel, Mail, MailAgent},
 };
 use async_std::task;
 use futures::{future::FutureExt, pin_mut, select};

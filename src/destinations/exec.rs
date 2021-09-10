@@ -1,6 +1,6 @@
 use crate::{
     config::ExecDestinationConfig,
-    hub::{DestinationMessage, HubDestinationChannel, MailAgent, MailDestination},
+    hub::{DestinationMessage, HubDestinationChannel, MailAgent},
 };
 use log::{debug, error, info, log_enabled, trace, Level as log_level};
 use std::{
@@ -8,6 +8,8 @@ use std::{
     process::{Command, Stdio},
     thread,
 };
+
+use super::MailDestination;
 
 pub struct ExecDestination {
     name: String,

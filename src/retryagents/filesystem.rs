@@ -1,6 +1,6 @@
 use crate::{
     config::FilesystemRetryAgentConfig,
-    hub::{Mail, MailAgent, MailRetryAgent, RetryAgentMessage},
+    hub::{Mail, MailAgent, RetryAgentMessage},
 };
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -12,6 +12,8 @@ use std::{
     thread,
     time::{Duration, SystemTime},
 };
+
+use super::MailRetryAgent;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -114,6 +116,8 @@ impl MailRetryAgent for FilesystemRetryAgent {
             restored_mails.sort_by_key(|rm| rm.due_time);
             let mut queue: VecDeque<QueuedRetryMail> = VecDeque::from(restored_mails);
 
+            let mut suspended = false;
+
             loop {
                 match channel.next_timeout(Duration::from_secs(1)) {
                     Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -167,33 +171,40 @@ impl MailRetryAgent for FilesystemRetryAgent {
                             }
                         }
                     }
+                    Ok(RetryAgentMessage::Suspend) => {
+                        info!(target: &log_target, "Suspending");
+                        suspended = true;
+                        channel.confirm_suspension();
+                    }
                 }
 
-                // see if any of the queued mails is due
-                let now = SystemTime::now();
-                while !queue.is_empty() {
-                    if queue.get(0).unwrap().due_time < now {
-                        let mail = queue.pop_front().unwrap();
-                        info!(
-                            target: &log_target,
-                            "Mail {} due for retransmission. Queueing.", mail.mail.hash
-                        );
-                        channel.notify_retry_mail(mail.dstname, mail.mail);
-                        if let Err(e) = fs::remove_file(&mail.file_path) {
-                            warn!(
+                if !suspended {
+                    // see if any of the queued mails is due
+                    let now = SystemTime::now();
+                    while !queue.is_empty() {
+                        if queue.get(0).unwrap().due_time < now {
+                            let mail = queue.pop_front().unwrap();
+                            info!(
                                 target: &log_target,
-                                "Failed to delete retry-mail file: {}\n{}", mail.file_path, e
+                                "Mail {} due for retransmission. Queueing.", mail.mail.hash
                             );
+                            channel.notify_retry_mail(mail.dstname, mail.mail);
+                            if let Err(e) = fs::remove_file(&mail.file_path) {
+                                warn!(
+                                    target: &log_target,
+                                    "Failed to delete retry-mail file: {}\n{}", mail.file_path, e
+                                );
+                            } else {
+                                debug!(
+                                    target: &log_target,
+                                    "Deleted retry-mail file: {}", mail.file_path
+                                );
+                            }
                         } else {
-                            debug!(
-                                target: &log_target,
-                                "Deleted retry-mail file: {}", mail.file_path
-                            );
+                            // The mails are stored in the order in which they were queued.
+                            // If the first isn't due, neither is every mail behind that.
+                            break;
                         }
-                    } else {
-                        // The mails are stored in the order in which they were queued.
-                        // If the first isn't due, neither is every mail behind that.
-                        break;
                     }
                 }
             }

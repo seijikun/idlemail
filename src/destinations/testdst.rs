@@ -1,9 +1,11 @@
 use crate::{
     config::TestDestinationConfig,
-    hub::{DestinationMessage, HubDestinationChannel, MailAgent, MailDestination},
+    hub::{DestinationMessage, HubDestinationChannel, MailAgent},
 };
 use log::{info, trace};
 use std::thread;
+
+use super::MailDestination;
 
 pub struct TestDestination {
     log_target: String,

@@ -1,9 +1,13 @@
 use super::config::{ConfigContainer, DestinationConfig, SourceConfig};
 use crate::{
     config::RetryAgentConfig,
-    destinations::{exec::ExecDestination, smtp::SmtpDestination, testdst::TestDestination},
-    retryagents::{filesystem::FilesystemRetryAgent, memory::MemoryRetryAgent},
-    sources::{imap_idle::ImapIdleSource, imap_poll::ImapPollSource, testsrc::TestSource},
+    destinations::{
+        exec::ExecDestination, smtp::SmtpDestination, testdst::TestDestination, MailDestination,
+    },
+    retryagents::{filesystem::FilesystemRetryAgent, memory::MemoryRetryAgent, MailRetryAgent},
+    sources::{
+        imap_idle::ImapIdleSource, imap_poll::ImapPollSource, testsrc::TestSource, MailSource,
+    },
 };
 use async_std::{channel as async_mpsc, future::timeout as await_timeout, task};
 use log::{info, warn};
@@ -34,10 +38,21 @@ impl Mail {
 }
 
 pub enum HubMessage {
-    NewMail { srcname: String, mail: Mail },
-    RetryMail { dstname: String, mail: Mail },
-    SendingMailFailed { dstname: String, mail: Mail },
+    NewMail {
+        srcname: String,
+        mail: Mail,
+    },
+    RetryMail {
+        dstname: String,
+        mail: Mail,
+    },
+    SendingMailFailed {
+        dstname: String,
+        mail: Mail,
+    },
     Shutdown,
+    /// Message sent by the RetryAgent to confirm successfull suspension
+    RetryAgentSuspended,
 }
 pub struct HubChannel {
     sender: mpsc::Sender<HubMessage>,
@@ -63,6 +78,9 @@ impl HubChannel {
 
     pub fn next(&self) -> HubMessage {
         self.recv.recv().unwrap()
+    }
+    pub fn try_next(&self) -> Option<HubMessage> {
+        self.recv.try_recv().ok()
     }
 
     pub fn queue_mail_for_sending(&self, dstname: &str, mail: Mail) -> Result<(), ()> {
@@ -91,6 +109,14 @@ impl HubChannel {
     pub fn shutdown_destinations(&mut self) {
         info!(target: "HubChannel", "Signaling shutdown to destinations");
         self.destinations.clear();
+    }
+    pub fn suspend_retryagent(&mut self) {
+        info!(target: "HubChannel", "Suspending retryagent");
+        let _ = self
+            .retryagent_sender
+            .as_ref()
+            .unwrap()
+            .send(RetryAgentMessage::Suspend);
     }
     pub fn shutdown_retryagent(&mut self) {
         info!(target: "HubChannel", "Signaling shutdown to retryagent");
@@ -189,7 +215,17 @@ impl HubSourceChannel {
 }
 
 pub enum RetryAgentMessage {
-    QueueMail { dstname: String, mail: Mail },
+    QueueMail {
+        dstname: String,
+        mail: Mail,
+    },
+    /// Sending this message to a running RetryAgent suspends its re-submission attempts.
+    /// This means, that the RetryAgent will still receive and handle incomming messages
+    /// to be re-submitted, but no actual resubmission will be sent to the hub.
+    /// This is used during shutdown, so persistent RetryAgents can store the incomming
+    /// messages for resubmission, but does not attempt actual resubmission so the destinations
+    /// can shut down.
+    Suspend,
 }
 pub struct HubRetryAgentChannel {
     sender: mpsc::Sender<HubMessage>,
@@ -207,20 +243,13 @@ impl HubRetryAgentChannel {
             .send(HubMessage::RetryMail { dstname, mail })
             .unwrap();
     }
+    pub fn confirm_suspension(&self) {
+        self.sender.send(HubMessage::RetryAgentSuspended).unwrap();
+    }
 }
 
 pub trait MailAgent {
     fn join(&mut self);
-}
-
-pub trait MailSource: MailAgent {
-    fn start(&mut self, channel: HubSourceChannel);
-}
-pub trait MailDestination: MailAgent {
-    fn start(&mut self, channel: HubDestinationChannel);
-}
-pub trait MailRetryAgent: MailAgent {
-    fn start(&mut self, channel: HubRetryAgentChannel);
 }
 
 pub struct MailHub {
@@ -283,6 +312,39 @@ impl MailHub {
         }
     }
 
+    fn handle_message(&self, msg: HubMessage) -> bool {
+        match msg {
+            HubMessage::Shutdown => {
+                return true;
+            }
+            HubMessage::RetryAgentSuspended => {
+                return true;
+            }
+            HubMessage::NewMail { srcname, mail } => {
+                info!(target: "MailHub", "Mail from source {}", srcname);
+                if let Some(dstlist) = self.mappings.get(&srcname) {
+                    for dstname in dstlist {
+                        info!(target: "MailHub", "Distributing Mail {} => {}", srcname, dstname);
+                        self.hubchannel
+                            .queue_mail_for_sending(dstname, mail.clone())
+                            .expect("Failed to distribute mail");
+                    }
+                }
+            }
+            HubMessage::SendingMailFailed { dstname, mail } => {
+                info!(target: "MailHub", "Queueing failed mail for retransmission");
+                self.hubchannel.queue_mail_for_retry(dstname, mail);
+            }
+            HubMessage::RetryMail { dstname, mail } => {
+                info!(target: "MailHub", "Distributing Mail [retry] => {}", dstname);
+                self.hubchannel
+                    .queue_mail_for_sending(&dstname, mail.clone())
+                    .expect("Failed to distribute mail");
+            }
+        }
+        false
+    }
+
     pub fn run(&mut self) {
         info!(target: "MailHub", "Starting.");
         for (dst_name, dst) in &mut self.destination_agents {
@@ -304,48 +366,56 @@ impl MailHub {
         info!(target: "MailHub", "Starting distribution loop");
         loop {
             let msg = self.hubchannel.next();
-            match msg {
-                HubMessage::Shutdown => break,
-                HubMessage::NewMail { srcname, mail } => {
-                    info!(target: "MailHub", "Mail from source {}", srcname);
-                    if let Some(dstlist) = self.mappings.get(&srcname) {
-                        for dstname in dstlist {
-                            info!(target: "MailHub", "Distributing Mail {} => {}", srcname, dstname);
-                            self.hubchannel
-                                .queue_mail_for_sending(dstname, mail.clone())
-                                .expect("Failed to distribute mail");
-                        }
-                    }
-                }
-                HubMessage::SendingMailFailed { dstname, mail } => {
-                    info!(target: "MailHub", "Queueing failed mail for retransmission");
-                    self.hubchannel.queue_mail_for_retry(dstname, mail);
-                }
-                HubMessage::RetryMail { dstname, mail } => {
-                    info!(target: "MailHub", "Distributing Mail [retry] => {}", dstname);
-                    self.hubchannel
-                        .queue_mail_for_sending(&dstname, mail.clone())
-                        .expect("Failed to distribute mail");
-                }
+            if self.handle_message(msg) {
+                break;
             }
         }
         info!(target: "MailHub", "Exited distribution loop");
-
         info!(target: "MailHub", "Shutting down");
+
+        // Shutdown procedure
+        // ####################
+
+        // First, we suspend the sources to stop the stream of new mails incomming
         self.hubchannel.shutdown_sources();
         for (src_name, src) in &mut self.source_agents {
             src.join();
             info!(target: "MailHub", "Source: {} stopped", src_name);
         }
-        self.hubchannel.shutdown_retryagent();
-        if let Some(retryagent) = &mut self.retryagent {
-            retryagent.join();
-            info!(target: "MailHub", "Retryagent stopped");
+
+        // Then, we suspend the retry-agent, so it does still take incomming mails to-be
+        // retried, but it does not actually schedule them (send them to the hub).
+        self.hubchannel.suspend_retryagent();
+
+        // Wait for retryagent to confirm suspension and handle all messages until then
+        // (there might still be some resubmissions sent to destinations here)
+        loop {
+            let msg = self.hubchannel.next();
+            if self.handle_message(msg) {
+                break;
+            }
         }
+
+        // The destinations can now finish the mails they have queued (which might schedule
+        // new mails in the retryagents), but no new mails are queued into destinations to send.
         self.hubchannel.shutdown_destinations();
         for (dst_name, dst) in &mut self.destination_agents {
             dst.join();
             info!(target: "MailHub", "Destination: {} stopped", dst_name);
+        }
+
+        // Handle all resubmission HubMessages that have accumulated before we tell the retryagent to shut down
+        // If the retryagent is a persistent one, it can store the new mails to be retried, it won't
+        // try to schedule them, since it's suspended.
+        while let Some(msg) = self.hubchannel.try_next() {
+            self.handle_message(msg);
+        }
+
+        // Last, the retryagent is shutdown.
+        self.hubchannel.shutdown_retryagent();
+        if let Some(retryagent) = &mut self.retryagent {
+            retryagent.join();
+            info!(target: "MailHub", "Retryagent stopped");
         }
     }
 

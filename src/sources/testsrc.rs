@@ -2,12 +2,14 @@ use std::{sync::mpsc, thread, time::Duration};
 
 use crate::{
     config::TestSourceConfig,
-    hub::{Mail, MailAgent, MailSource},
+    hub::{Mail, MailAgent},
 };
 use lettre::{
     message::{header, Mailbox, MultiPart, SinglePart},
     Message,
 };
+
+use super::MailSource;
 
 pub struct TestSource {
     name: String,
