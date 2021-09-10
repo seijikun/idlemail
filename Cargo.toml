@@ -1,6 +1,6 @@
 [package]
 name = "idlemail"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Markus Ebner <info@ebner-markus.de>"]
 edition = "2018"
 
