@@ -52,9 +52,8 @@ impl MailSource for ImapPollSource {
                     Ok(mailboxes) => {
                         mailboxes.for_each(|mailbox| {
                             let mut unread_mails = Vec::new();
-                            con.iter_unseen(&mailbox)
-                                .unwrap()
-                                .for_each(|unseen_message| {
+                            task::block_on(con.iter_unseen(&mailbox)).unwrap().for_each(
+                                |unseen_message| {
                                     if let Ok((message_id, unseen_message)) = unseen_message {
                                         unread_mails.push(message_id);
                                         debug!(
@@ -67,7 +66,8 @@ impl MailSource for ImapPollSource {
                                             unseen_message,
                                         ));
                                     }
-                                });
+                                },
+                            );
                             if !config.keep {
                                 if let Err(e) = task::block_on(con.delete_mails(&unread_mails)) {
                                     warn!(

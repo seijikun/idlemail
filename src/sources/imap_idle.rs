@@ -57,9 +57,8 @@ impl MailSource for ImapIdleSource {
                     Ok(mailboxes) => {
                         mailboxes.for_each(|mailbox| {
                             let mut unread_mails = Vec::new();
-                            con.iter_unseen(&mailbox)
-                                .unwrap()
-                                .for_each(|unseen_message| {
+                            task::block_on(con.iter_unseen(&mailbox)).unwrap().for_each(
+                                |unseen_message| {
                                     if let Ok((message_id, unseen_message)) = unseen_message {
                                         unread_mails.push(message_id);
                                         debug!(
@@ -72,7 +71,8 @@ impl MailSource for ImapIdleSource {
                                             unseen_message,
                                         ));
                                     }
-                                });
+                                },
+                            );
                             if !config.keep && !unread_mails.is_empty() {
                                 if let Err(e) = task::block_on(con.delete_mails(&unread_mails)) {
                                     warn!(
@@ -98,7 +98,9 @@ impl MailSource for ImapIdleSource {
                         target: &log_target,
                         "Entering IMAP IDLE to wait for server notification"
                     );
-                    match con.run(|sess| task::block_on(sess.select(config.path.clone()))) {
+                    match task::block_on(
+                        con.run(|sess| task::block_on(sess.select(config.path.clone()))),
+                    ) {
                         Ok(_) => {}
                         Err(e) => {
                             error!(
@@ -112,7 +114,7 @@ impl MailSource for ImapIdleSource {
                             continue;
                         }
                     }
-                    let mut idle_handle = match con.idle() {
+                    let mut idle_handle = match task::block_on(con.idle()) {
                         Ok(idle_handle) => idle_handle,
                         Err(e) => {
                             error!(
