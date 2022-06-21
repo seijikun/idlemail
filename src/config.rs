@@ -50,6 +50,8 @@ impl ConfigContainer {
 #[serde(deny_unknown_fields)]
 #[serde(tag = "type")]
 pub enum AuthMethod {
+    #[serde(rename = "none")]
+    None,
     #[serde(rename = "plain")]
     Plain { user: String, password: String },
     #[serde(rename = "login")]

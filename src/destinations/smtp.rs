@@ -67,6 +67,7 @@ impl MailDestination for SmtpDestination {
             // configure authentication
             if let Some(auth) = config.auth {
                 match auth {
+                    AuthMethod::None => {}
                     AuthMethod::Plain { user, password } => {
                         connection_builder = connection_builder
                             .credentials(auth::Credentials::new(user, password))

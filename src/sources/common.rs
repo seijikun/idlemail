@@ -77,12 +77,12 @@ impl ImapConnection {
         if self.session.lock().await.is_none() {
             let client = self.client()?;
             let session = match self.auth.clone() {
-                AuthMethod::Plain { .. } => {
-                    //TODO: implement
-                    unimplemented!();
-                }
                 AuthMethod::Login { user, password } => {
                     task::block_on(client.login(user, password))
+                }
+                _ => {
+                    //TODO: implement
+                    unimplemented!();
                 }
             }
             .map_err(|(e, _)| e)
