@@ -5,7 +5,7 @@ use crate::{
 use lettre::{
     address::Envelope, transport::smtp::authentication as auth, Address, SmtpTransport, Transport,
 };
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use std::thread;
 
 use super::MailDestination;
@@ -89,8 +89,12 @@ impl MailDestination for SmtpDestination {
                 match mailer.send_raw(&evenlope, &mail.data) {
                     Ok(_) => info!(target: &log_target, "Successfully sent mail"),
                     Err(err) => {
-                        error!(target: &log_target, "Error while sending mail:\n{}", err);
-                        channel.notify_failed_send(mail);
+                        if err.is_permanent() {
+                            warn!(target: &log_target, "The destination server does not accept this email, will not try again:\n{}", err);
+                        } else {
+                            error!(target: &log_target, "Error while sending mail:\n{}", err);
+                            channel.notify_failed_send(mail);
+                        }
                     }
                 }
             }
