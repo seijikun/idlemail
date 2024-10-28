@@ -15,7 +15,7 @@ RUN rm ./target/release/deps/idlemail*
 RUN cargo build --release
 
 # Build actual runtime container
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 ARG APP=/idlemail
 
 RUN apt-get update \
