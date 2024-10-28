@@ -11,7 +11,8 @@ pub struct ConfigContainer {
 }
 impl ConfigContainer {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<ConfigContainer, String> {
-        let config_file = File::open(path).map_err(|_| "Failed to open config file".to_owned())?;
+        let config_file =
+            File::open(path).map_err(|e| format!("Failed to open config file: {}", e))?;
         let reader = BufReader::new(config_file);
         let config: ConfigContainer = serde_json::from_reader(reader)
             .map_err(|e| format!("Failed to parse config file: {}", e))?;
