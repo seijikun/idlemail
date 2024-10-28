@@ -192,13 +192,10 @@ impl ImapConnection {
         // get a (linearized) list of the folder structure
         let mut mailboxes = task::block_on(self.recursive_mailbox_list())?;
         if let Some(filter) = path_filter {
-            mailboxes = mailboxes
-                .into_iter()
-                .filter(|mailbox| {
-                    // Match the given filter against the "/"-delimited absolute path
-                    mailbox.path().starts_with(filter)
-                })
-                .collect();
+            mailboxes.retain(|mailbox| {
+                // Match the given filter against the "/"-delimited absolute path
+                mailbox.path().starts_with(filter)
+            });
         }
         Ok(mailboxes.into_iter())
     }
@@ -238,7 +235,7 @@ pub struct UnseenMailIterator<'a> {
     con: &'a ImapConnection,
     unread_mails: VecDeque<Seq>,
 }
-impl<'a> Iterator for UnseenMailIterator<'a> {
+impl Iterator for UnseenMailIterator<'_> {
     type Item = Result<(Seq, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {

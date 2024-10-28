@@ -33,7 +33,7 @@ impl ConfigContainer {
             }
         }
         for srcname in self.sources.keys() {
-            if self.mappings.get(srcname).is_none() {
+            if !self.mappings.contains_key(srcname) {
                 return Err(format!("Source: {} has no mapping", srcname));
             }
         }

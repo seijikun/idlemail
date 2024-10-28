@@ -182,7 +182,7 @@ impl MailRetryAgent for FilesystemRetryAgent {
                     // see if any of the queued mails is due
                     let now = SystemTime::now();
                     while !queue.is_empty() {
-                        if queue.get(0).unwrap().due_time < now {
+                        if queue.front().unwrap().due_time < now {
                             let mail = queue.pop_front().unwrap();
                             info!(
                                 target: &log_target,

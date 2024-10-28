@@ -134,12 +134,10 @@ impl MailSource for ImapIdleSource {
                     let idle_future = idle_future.fuse();
                     pin_mut!(idle_future);
                     let should_exit = task::block_on(async {
-                        loop {
-                            select! {
-                                _ = idle_future => return false,
-                                _ = stop_future => return true,
-                                complete => unreachable!()
-                            };
+                        select! {
+                            _ = idle_future => false,
+                            _ = stop_future => true,
+                            complete => unreachable!()
                         }
                     });
                     if should_exit {
